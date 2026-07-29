@@ -1,16 +1,15 @@
 {
-  "name": "st-ltd-api",
   "version": 2,
   "builds": [
     {
-      "src": "api/health.js",
+      "src": "api/index.ts",
       "use": "@vercel/node"
     }
   ],
   "routes": [
     {
-      "src": "/api/health",
-      "dest": "/api/health.js"
+      "src": "/(.*)",
+      "dest": "/api/index.js"
     }
   ]
 }

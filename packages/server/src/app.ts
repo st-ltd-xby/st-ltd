@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-dotenv.config({ path: '../../.env' });
+dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
 import express, { Application } from 'express';
 import cors from 'cors';
@@ -58,7 +58,7 @@ app.use('/api/v1/admin', adminRouter);
 app.use('/api/v1', uploadRoutes);
 
 // 静态文件服务 - 上传目录
-app.use('/uploads', express.static(path.join(__dirname, '../../uploads')));
+app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')));
 
 // 短链跳转（公开接口）
 app.get('/t/:shortCode', async (req, res) => {
@@ -97,6 +97,9 @@ async function start() {
   });
 }
 
-start();
+// 仅在非 Vercel 环境自动启动
+if (!process.env.VERCEL) {
+  start();
+}
 
 export default app;
