@@ -1,0 +1,32 @@
+{
+  "name": "ltd-hub",
+  "version": "1.0.0",
+  "private": true,
+  "description": "LTD 营销枢纽系统 - Lead To Deal",
+  "scripts": {
+    "dev": "turbo run dev",
+    "dev:server": "turbo run dev --filter=@ltd/server",
+    "dev:web": "turbo run dev --filter=@ltd/web",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "db:generate": "turbo run db:generate --filter=@ltd/server",
+    "db:push": "turbo run db:push --filter=@ltd/server",
+    "db:seed": "turbo run db:seed --filter=@ltd/server"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "esbuild",
+      "prisma"
+    ]
+  },
+  "dependencies": {
+    "@types/chart.js": "^4.0.1",
+    "chart.js": "^4.5.1"
+  }
+}

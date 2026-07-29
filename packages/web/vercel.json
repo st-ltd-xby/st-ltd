@@ -1,0 +1,11 @@
+{
+  "buildCommand": "npx vite build",
+  "outputDirectory": "dist",
+  "framework": "vite",
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "https://st-ltd-api.vercel.app/api/$1" },
+    { "source": "/uploads/(.*)", "destination": "https://st-ltd-api.vercel.app/uploads/$1" },
+    { "source": "/t/(.*)", "destination": "https://st-ltd-api.vercel.app/t/$1" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

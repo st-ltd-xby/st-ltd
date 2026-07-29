@@ -1,0 +1,807 @@
+// LTD 营销枢纽系统 - 数据模型
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-1.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// 系统基础模块
+// ============================================
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String   // 企业名称
+  logo      String?  // 企业 Logo
+  phone     String?  // 联系电话
+  address   String?  // 企业地址
+  domain    String?  @unique // 企业自定义域名
+  plan      String   @default("free") // 套餐: free/basic/pro/enterprise
+  status    String   @default("active") // active/suspended/cancelled
+  config    String?  // 租户配置 JSON
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users         User[]
+  sites         Site[]
+  leads         Lead[]
+  customers     Customer[]
+  articles      Article[]
+  products      Product[]
+  employeeCards EmployeeCard[]
+  materials     Material[]
+  tags          Tag[]
+  promotionTasks PromotionTask[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  email        String
+  password     String
+  name         String
+  avatar       String?
+  phone        String?
+  role         String   @default("staff") // admin/manager/staff
+  department   String?
+  status       String   @default("active") // active/inactive
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  assignedLeads     Lead[]          @relation("LeadAssignee")
+  followUps         FollowUp[]
+  employeeCard      EmployeeCard?
+  shareRecords      ShareRecord[]
+  operationLogs     OperationLog[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+}
+
+model Role {
+  id         String @id @default(cuid())
+  tenantId   String
+  name       String // 角色名称
+  code       String // admin/manager/staff
+  permissions String  // 权限列表
+  createdAt  DateTime @default(now())
+
+  @@unique([tenantId, code])
+}
+
+model OperationLog {
+  id         String   @id @default(cuid())
+  tenantId   String
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  action     String   // create/update/delete/login
+  module     String   // lead/customer/site/article
+  targetId   String?  // 操作对象 ID
+  detail     String?  // 操作详情
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([userId])
+}
+
+// ============================================
+// CMS 建站模块
+// ============================================
+
+model Site {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String   // 站点名称
+  type        String   // pc/h5/miniapp/mall
+  domain      String?  @unique // 绑定域名
+  templateId  String?  // 使用的模板
+  seoTitle    String?
+  seoDesc     String?
+  seoKeywords String?
+  config      String?  // 站点配置 (主题色、Logo等)
+  status      String   @default("draft") // draft/published/offline
+  publishedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  pages       Page[]
+  forms       Form[]
+  mediaAssets MediaAsset[]
+
+  @@index([tenantId])
+}
+
+model Page {
+  id        String   @id @default(cuid())
+  siteId    String
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  title     String   // 页面标题
+  slug      String   // URL 路径
+  content   String   // 页面组件 JSON Schema
+  seoTitle  String?
+  seoDesc   String?
+  seoKeywords String?
+  status    String   @default("draft") // draft/published
+  version   Int      @default(1)
+  publishedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([siteId, slug])
+  @@index([siteId])
+}
+
+model Template {
+  id          String   @id @default(cuid())
+  name        String
+  category    String   // corporate/ecommerce/portfolio/blog
+  thumbnail   String?
+  content     String   // 模板内容
+  config      String?
+  isPremium   Boolean  @default(false)
+  sortOrder   Int      @default(0)
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Form {
+  id          String   @id @default(cuid())
+  siteId      String
+  site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  name        String   // 表单名称
+  description String?
+  fields      String   // 表单字段定义
+  settings    String?  // 提交设置 (通知邮件等)
+  status      String   @default("active") // active/inactive
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  submissions FormSubmission[]
+
+  @@index([siteId])
+}
+
+model FormSubmission {
+  id        String   @id @default(cuid())
+  formId    String
+  form      Form     @relation(fields: [formId], references: [id], onDelete: Cascade)
+  data      String   // 提交数据
+  visitorId String?
+  source    String?  // 来源页面
+  ip        String?
+  ua        String?  // User Agent
+  createdAt DateTime @default(now())
+
+  @@index([formId])
+  @@index([createdAt])
+}
+
+model MediaAsset {
+  id        String   @id @default(cuid())
+  siteId    String
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  name      String   // 文件名
+  type      String   // image/video/document
+  url       String   // 文件 URL
+  size      Int      // 文件大小 (bytes)
+  mimeType  String
+  width     Int?     // 图片/视频宽度
+  height    Int?     // 图片/视频高度
+  createdAt DateTime @default(now())
+
+  @@index([siteId])
+}
+
+// ============================================
+// SCRM 客户管理模块
+// ============================================
+
+model Visitor {
+  id          String   @id @default(cuid())
+  tenantId    String
+  fingerprint String?  // 浏览器指纹
+  ip          String?
+  ua          String?  // User Agent
+  referrer    String?  // 来源
+  landingPage String?  // 落地页
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  firstVisitAt DateTime @default(now())
+  lastVisitAt  DateTime @default(now())
+  visitCount   Int      @default(1)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  behaviors VisitorBehavior[]
+  leads     Lead[]
+
+  @@index([tenantId, lastVisitAt])
+  @@index([fingerprint])
+}
+
+model VisitorBehavior {
+  id         String   @id @default(cuid())
+  visitorId  String
+  visitor    Visitor  @relation(fields: [visitorId], references: [id], onDelete: Cascade)
+  type       String   // page_view/click/form_submit/chat
+  page       String?  // 页面路径
+  data       String?  // 行为数据
+  createdAt  DateTime @default(now())
+
+  @@index([visitorId, createdAt])
+}
+
+model Lead {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String   // 线索名称
+  phone       String?
+  email       String?
+  company     String?  // 公司名称
+  position    String?  // 职位
+  source      String   // baidu/douyin/wechat/xiaohongshu/card/form/referral
+  sourceId    String?  // 来源详情 ID (如内容ID)
+  visitorId   String?
+  visitor     Visitor? @relation(fields: [visitorId], references: [id])
+  assigneeId  String?  // 分配给的销售
+  assignee    User?    @relation("LeadAssignee", fields: [assigneeId], references: [id])
+  status      String   @default("new") // new/following/qualified/opportunity/won/lost
+  priority    String   @default("medium") // low/medium/high
+  tags        String   // 标签
+  note        String?  // 备注
+  convertedAt DateTime? // 转化为客户时间
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  followUps   FollowUp[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, source])
+  @@index([assigneeId])
+  @@index([createdAt])
+}
+
+model Customer {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String   // 客户名称 (公司名)
+  industry    String?  // 行业
+  level       String   @default("C") // A/B/C 等级
+  stage       String   @default("prospect") // prospect/active/churned
+  contactName String?  // 主要联系人
+  contactPhone String?
+  contactEmail String?
+  address     String?
+  website     String?
+  leadId      String?  // 来源线索
+  tags        String
+  totalDeal   Float    @default(0) // 累计成交金额
+  note        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  contacts    Contact[]
+  opportunities Opportunity[]
+
+  @@index([tenantId, level])
+  @@index([tenantId, stage])
+}
+
+model Contact {
+  id          String   @id @default(cuid())
+  customerId  String
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  name        String
+  phone       String?
+  email       String?
+  position    String?
+  isPrimary   Boolean  @default(false)
+  note        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([customerId])
+}
+
+model FollowUp {
+  id          String   @id @default(cuid())
+  leadId      String
+  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  type        String   // phone/visit/email/wechat/demo
+  content     String   // 跟进内容
+  nextAction  String?  // 下一步计划
+  nextTime    DateTime? // 下次跟进时间
+  createdAt   DateTime @default(now())
+
+  @@index([leadId, createdAt])
+}
+
+model Opportunity {
+  id          String   @id @default(cuid())
+  customerId  String
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  tenantId    String
+  title       String   // 商机名称
+  type        String   @default("supply_demand") // supply_demand/bidding/trade/resource
+  amount      Float    // 预估金额
+  budget      Float?   // 预算金额（招投标用）
+  stage       String   @default("pending") // pending/following/proposal/negotiation/won/lost
+  probability Int      @default(50) // 赢单概率 0-100
+  deadline    DateTime? // 截止日期（招投标用）
+  counterparty String?  // 对方单位（买卖/资源对接用）
+  cooperationMode String? // 合作模式（资源对接用）
+  industry    String?  // 行业领域
+  description String?  // 需求/资源描述
+  expectedCloseDate DateTime?
+  leadId      String?  // 来源线索
+  note        String?
+  wonAt       DateTime?
+  lostAt      DateTime?
+  lostReason  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([tenantId, stage])
+  @@index([tenantId, type])
+  @@index([customerId])
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name      String
+  color     String   @default("#1677ff")
+  category  String   @default("custom") // source/level/industry/custom
+  createdAt DateTime @default(now())
+
+  @@unique([tenantId, name, category])
+}
+
+// ============================================
+// 内容营销模块
+// ============================================
+
+model Article {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  title       String
+  summary     String?
+  content     String   // 富文本内容
+  coverImage  String?
+  type        String   @default("article") // article/video/whitepaper
+  videoUrl    String?
+  documentUrl String?
+  status      String   @default("draft") // draft/published/archived
+  publishedAt DateTime?
+  viewCount   Int      @default(0)
+  shareCount  Int      @default(0)
+  leadCount   Int      @default(0) // 带来的线索数
+  authorId    String?
+  tags        String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  distributions Distribution[]
+  trackingLinks TrackingLink[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, type])
+}
+
+model Distribution {
+  id          String   @id @default(cuid())
+  articleId   String
+  article     Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  channel     String   // wechat/douyin/toutiao/xiaohongshu/weibo
+  channelPostId String? // 渠道发布后的文章 ID
+  status      String   @default("pending") // pending/publishing/published/failed
+  publishedAt DateTime?
+  errorMessage String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([articleId])
+}
+
+model TrackingLink {
+  id          String   @id @default(cuid())
+  articleId   String?
+  article     Article? @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  shortCode   String   @unique // 短链码
+  targetUrl   String
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  clickCount  Int      @default(0)
+  leadCount   Int      @default(0)
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([shortCode])
+}
+
+// ============================================
+// 全员营销模块
+// ============================================
+
+model EmployeeCard {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id])
+  name        String
+  title       String   // 职位
+  department  String?
+  phone       String?
+  email       String?
+  avatar      String?
+  qrCode      String?  // 名片二维码 URL
+  viewCount   Int      @default(0)
+  leadCount   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+model Material {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  title       String
+  type        String   // image/video/document/poster
+  url         String
+  thumbnail   String?
+  fileSize    Int?
+  shareCount  Int      @default(0)
+  viewCount   Int      @default(0)
+  leadCount   Int      @default(0)
+  tags        String
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  shareRecords ShareRecord[]
+
+  @@index([tenantId, type])
+}
+
+model ShareRecord {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  materialId  String?
+  material    Material? @relation(fields: [materialId], references: [id])
+  articleId   String?
+  shareType   String   // material/article/card
+  shareUrl    String   // 分享链接
+  shortCode   String   @unique
+  viewCount   Int      @default(0)
+  leadCount   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([shortCode])
+}
+
+// ============================================
+// 商城模块
+// ============================================
+
+model Product {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  coverImage  String?
+  images      String   // 商品图片列表
+  price       Float    // 售价
+  originalPrice Float? // 原价
+  stock       Int      @default(0)
+  salesCount  Int      @default(0)
+  category    String?
+  tags        String
+  externalUrl String?  // 产品外部链接
+  status      String   @default("draft") // draft/active/offline
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  skus        ProductSku[]
+  orderItems  OrderItem[]
+
+  @@index([tenantId, status])
+}
+
+model ProductSku {
+  id          String   @id @default(cuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name        String   // SKU 名称 (如: 一年/两年)
+  price       Float
+  stock       Int      @default(0)
+  attributes  String?  // SKU 属性
+  createdAt   DateTime @default(now())
+
+  @@index([productId])
+}
+
+model Order {
+  id          String   @id @default(cuid())
+  tenantId    String
+  orderNo     String   @unique // 订单编号
+  customerId  String?  // 关联客户
+  contactName String?
+  contactPhone String?
+  totalAmount Float
+  payAmount   Float    // 实付金额
+  discount    Float    @default(0)
+  status      String   @default("pending") // pending/paid/shipped/completed/cancelled/refunded
+  payMethod   String?  // wechat/alipay/transfer
+  paidAt      DateTime?
+  note        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items       OrderItem[]
+  payments    Payment[]
+
+  @@index([tenantId, status])
+  @@index([orderNo])
+}
+
+model OrderItem {
+  id          String   @id @default(cuid())
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id])
+  skuId       String?
+  name        String   // 商品名称快照
+  price       Float
+  quantity    Int
+  subtotal    Float
+
+  @@index([orderId])
+}
+
+model Payment {
+  id            String   @id @default(cuid())
+  orderId       String
+  order         Order    @relation(fields: [orderId], references: [id])
+  transactionId String?  // 第三方支付流水号
+  amount        Float
+  method        String   // wechat/alipay/transfer
+  status        String   @default("pending") // pending/success/failed/refunded
+  paidAt        DateTime?
+  createdAt     DateTime @default(now())
+
+  @@index([orderId])
+}
+
+model Member {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String
+  phone       String   @unique
+  email       String?
+  avatar      String?
+  level       String   @default("normal") // normal/silver/gold/vip
+  points      Int      @default(0)
+  totalSpent  Float    @default(0)
+  customerId  String?  // 关联 SCRM 客户
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+model Appointment {
+  id          String   @id @default(cuid())
+  tenantId    String
+  customerId  String?
+  name        String   // 预约人姓名
+  phone       String
+  email       String?
+  service     String   // 预约服务
+  date        DateTime // 预约日期
+  time        String   // 预约时间
+  status      String   @default("pending") // pending/confirmed/completed/cancelled
+  note        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([tenantId, date])
+}
+
+// ============================================
+// 推广工具模块
+// ============================================
+
+model EmailTemplate {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String   // 模板名称
+  subject     String   // 邮件主题
+  content     String   // 模板内容 (HTML)
+  variables   String?  // 可用变量列表 (逗号分隔)
+  status      String   @default("active") // active/inactive
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+model EmailCampaign {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String   // 活动名称
+  templateId  String?
+  subject     String   // 邮件主题
+  content     String   // 发送内容
+  recipients  String   // 收件人列表 (逗号分隔邮箱)
+  totalCount  Int      @default(0) // 总发送数
+  sentCount   Int      @default(0) // 已发送
+  successCount Int     @default(0) // 成功数
+  failCount   Int      @default(0) // 失败数
+  status      String   @default("draft") // draft/sending/sent/failed
+  scheduledAt DateTime? // 定时发送时间
+  sentAt      DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([tenantId, status])
+}
+
+model QrCode {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String   // 二维码名称
+  targetUrl   String   // 目标链接
+  imageUrl    String?  // 生成的二维码图片 URL
+  scanCount   Int      @default(0) // 扫码次数
+  size        Int      @default(300) // 尺寸
+  color       String   @default("#000000") // 颜色
+  bgColor     String   @default("#ffffff") // 背景色
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+model EmailAddress {
+  id        String   @id @default(cuid())
+  tenantId  String
+  email     String   // 邮箱地址
+  name      String?  // 联系人姓名
+  group     String   @default("default") // 分组
+  status    String   @default("active") // 状态: active/unsubscribed/bounced
+  tags      String?  // 标签
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, group])
+  @@unique([tenantId, email]) // 每个租户下邮箱唯一
+}
+
+// ============================================
+// 外部电商网站
+// ============================================
+
+model ExternalWebsite {
+  id              String   @id @default(cuid())
+  tenantId        String
+  name            String   // 网站名称
+  url             String   // 网站URL
+  platform        String   // 平台类型 (shopify, woocommerce, etc)
+  apiKey          String?  // API密钥
+  apiSecret       String?  // API密钥密文
+  syncInterval    Int      @default(3600) // 同步间隔（秒）
+  lastSyncAt      DateTime? // 最后同步时间
+  status          String   @default("active") // active/inactive/error
+  reviewStatus    String   @default("pending") // pending/approved/rejected
+  reviewNote      String?  // 审核备注
+  contactName     String?  // 联系人
+  contactPhone    String?  // 联系电话
+  contactEmail    String?  // 联系邮箱
+  config          String?  // 额外配置
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  products        ExternalProduct[]
+  syncLogs        SyncLog[]
+
+  @@index([tenantId])
+}
+
+model ExternalProduct {
+  id              String   @id @default(cuid())
+  websiteId       String
+  externalId      String   // 外部平台的产品ID
+  name            String   // 产品名称
+  description     String?  // 产品描述
+  coverImage      String?  // 封面图
+  images          String?  // 产品图集
+  price           Float    // 价格
+  originalPrice   Float?   // 原价
+  stock           Int      @default(0) // 库存
+  status          String   @default("active") // active/inactive
+  externalUrl     String?  // 外部产品页面URL
+  externalData    String?  // 原始外部数据
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  website         ExternalWebsite @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  promotionTasks  PromotionTask[]
+
+  @@index([websiteId])
+  @@unique([websiteId, externalId])
+}
+
+model PromotionTask {
+  id              String   @id @default(cuid())
+  tenantId        String
+  name            String   // 任务名称
+  externalProductId String
+  type            String   // 推广类型: tracking_link, qr_code, email
+  status          String   @default("pending") // pending/running/completed/failed
+  config          String?  // 任务配置
+  result          String?  // 任务结果
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant          Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  externalProduct ExternalProduct @relation(fields: [externalProductId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([externalProductId])
+}
+
+model SyncLog {
+  id              String   @id @default(cuid())
+  websiteId       String
+  type            String   // sync/products/categories/etc
+  status          String   // success/failed
+  message         String?
+  details         String?  // 详细信息
+  createdAt       DateTime @default(now())
+
+  website         ExternalWebsite @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@index([websiteId, createdAt])
+}
+
+// ============================================
+// 系统配置
+// ============================================
+
+model SystemConfig {
+  id        String   @id @default(cuid())
+  tenantId  String
+  key       String
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, key])
+}

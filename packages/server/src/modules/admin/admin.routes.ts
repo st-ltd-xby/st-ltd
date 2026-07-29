@@ -1,0 +1,1903 @@
+import { Router, Request, Response } from 'express';
+import bcrypt from 'bcryptjs';
+import prisma from '../../common/prisma';
+import { success, fail, notFound } from '../../common/response';
+import { authMiddleware, authorizeRole } from '../../middleware/auth';
+
+const router: Router = Router();
+
+// 验证token中间件
+router.use(authMiddleware);
+
+// ===== 用户管理 =====
+
+// 获取用户列表
+router.get('/users', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const { page = '1', pageSize = '20', search, role } = req.query as any;
+    const skip = (Number(page) - 1) * Number(pageSize);
+    
+    // 构建查询条件
+    const whereConditions: any = {
+      tenantId: req.user!.tenantId
+    };
+    
+    if (search) {
+      whereConditions.OR = [
+        { name: { contains: search as string } },
+        { email: { contains: search as string } },
+        { phone: { contains: search as string } }
+      ];
+    }
+    
+    if (role) {
+      whereConditions.role = role;
+    }
+
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where: whereConditions,
+        skip,
+        take: Number(pageSize),
+        orderBy: { createdAt: 'desc' }
+      }),
+      prisma.user.count({ where: whereConditions })
+    ]);
+
+    success(res, { list: users, total, page: Number(page), pageSize: Number(pageSize) }, '用户列表获取成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 获取用户详情
+router.get('/users/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+    const user = await prisma.user.findUnique({
+      where: { id }
+    });
+
+    if (!user || user.tenantId !== req.user!.tenantId) {
+      return notFound(res, '用户不存在或不属于当前租户');
+    }
+
+    success(res, user, '用户详情获取成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 创建用户
+router.post('/users', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const { name, email, phone, password, role, status } = req.body;
+
+    // 检查邮箱是否已存在于当前租户
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        email,
+        tenantId: req.user!.tenantId
+      }
+    });
+
+    if (existingUser) {
+      return fail(res, '邮箱已存在');
+    }
+
+    const newUser = await prisma.user.create({
+      data: {
+        name,
+        email,
+        phone,
+        password: await bcrypt.hash(password, 10),
+        role: role || 'staff',
+        status: status || 'active',
+        tenantId: req.user!.tenantId
+      }
+    });
+
+    success(res, newUser, '用户创建成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 更新用户
+router.put('/users/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const { name, email, phone, role, status } = req.body;
+
+    const user = await prisma.user.findUnique({
+      where: { id }
+    });
+
+    if (!user || user.tenantId !== req.user!.tenantId) {
+      return notFound(res, '用户不存在或不属于当前租户');
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id },
+      data: {
+        name,
+        email,
+        phone,
+        role,
+        status,
+        updatedAt: new Date()
+      }
+    });
+
+    success(res, updatedUser, '用户更新成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 删除用户
+router.delete('/users/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+    const user = await prisma.user.findUnique({
+      where: { id }
+    });
+
+    if (!user || user.tenantId !== req.user!.tenantId) {
+      return notFound(res, '用户不存在或不属于当前租户');
+    }
+
+    // 不能删除自己
+    if (user.id === req.user!.userId) {
+      return fail(res, '不能删除自己的账户');
+    }
+
+    await prisma.user.delete({
+      where: { id }
+    });
+
+    success(res, null, '用户删除成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// ===== 注册审核 =====
+
+// 获取待审核注册列表（超级管理员）
+router.get('/registrations', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const { page = '1', pageSize = '20', status } = req.query as any;
+    const skip = (Number(page) - 1) * Number(pageSize);
+    
+    const whereConditions: any = { status: status || 'pending' };
+
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where: whereConditions,
+        skip,
+        take: Number(pageSize),
+        orderBy: { createdAt: 'desc' },
+        include: { tenant: true }
+      }),
+      prisma.user.count({ where: whereConditions })
+    ]);
+
+    success(res, { list: users, total, page: Number(page), pageSize: Number(pageSize) }, '注册列表获取成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 审核通过
+router.put('/registrations/:id/approve', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) return notFound(res, '用户不存在');
+    
+    await prisma.user.update({
+      where: { id },
+      data: { status: 'active' }
+    });
+    
+    success(res, null, '审核通过，用户已激活');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 审核拒绝
+router.put('/registrations/:id/reject', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const { reason } = req.body;
+    
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) return notFound(res, '用户不存在');
+    
+    await prisma.user.update({
+      where: { id },
+      data: { status: 'rejected' }
+    });
+    
+    success(res, null, '已拒绝该注册申请');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 更改用户密码
+router.put('/users/:id/password', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const { password } = req.body;
+
+    const user = await prisma.user.findUnique({
+      where: { id }
+    });
+
+    if (!user || user.tenantId !== req.user!.tenantId) {
+      return notFound(res, '用户不存在或不属于当前租户');
+    }
+
+    await prisma.user.update({
+      where: { id },
+      data: { password: await bcrypt.hash(password, 10) }
+    });
+
+    success(res, null, '密码更改成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// ===== 租户管理 =====
+
+// 获取租户列表
+router.get('/tenants', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const { page = '1', pageSize = '20', search } = req.query as any;
+    const skip = (Number(page) - 1) * Number(pageSize);
+    
+    // 构建查询条件
+    const whereConditions: any = {};
+    
+    if (search) {
+      whereConditions.name = { contains: search as string };
+    }
+
+    const [tenants, total] = await Promise.all([
+      prisma.tenant.findMany({
+        where: whereConditions,
+        skip,
+        take: Number(pageSize),
+        orderBy: { createdAt: 'desc' }
+      }),
+      prisma.tenant.count({ where: whereConditions })
+    ]);
+
+    success(res, { list: tenants, total, page: Number(page), pageSize: Number(pageSize) }, '租户列表获取成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 获取租户详情
+router.get('/tenants/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id }
+    });
+
+    if (!tenant) {
+      return notFound(res, '租户不存在');
+    }
+
+    success(res, tenant, '租户详情获取成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 创建租户
+router.post('/tenants', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const { name, status } = req.body;
+
+    // 检查租户名是否已存在
+    const existingTenant = await prisma.tenant.findFirst({
+      where: { name: { equals: name } }
+    });
+
+    if (existingTenant) {
+      return fail(res, '租户名已存在');
+    }
+
+    const newTenant = await prisma.tenant.create({
+      data: {
+        name,
+
+        status: status || 'active',
+        config: '{}',
+        plan: 'free',
+        logo: '',
+        phone: '',
+        address: '',
+        domain: ''
+      }
+    });
+
+    success(res, newTenant, '租户创建成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 更新租户
+router.put('/tenants/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const { name, status, config, plan, logo, phone, address, domain } = req.body;
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id }
+    });
+
+    if (!tenant) {
+      return notFound(res, '租户不存在');
+    }
+
+    const updatedTenant = await prisma.tenant.update({
+      where: { id },
+      data: {
+        name,
+
+        status,
+        config: config || tenant.config,
+        plan: plan || tenant.plan,
+        logo: logo || tenant.logo,
+        phone: phone || tenant.phone,
+        address: address || tenant.address,
+        domain: domain || tenant.domain,
+        updatedAt: new Date()
+      }
+    });
+
+    success(res, updatedTenant, '租户更新成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 删除租户
+router.delete('/tenants/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id }
+    });
+
+    if (!tenant) {
+      return notFound(res, '租户不存在');
+    }
+
+    // 检查是否有用户属于此租户
+    const userCount = await prisma.user.count({
+      where: { tenantId: id }
+    });
+
+    if (userCount > 0) {
+      return fail(res, '租户下还有用户，无法删除');
+    }
+
+    await prisma.tenant.delete({
+      where: { id }
+    });
+
+    success(res, null, '租户删除成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// ===== 系统配置管理 =====
+
+// 获取API密钥管理
+router.get('/api-keys', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    // 获取API密钥配置 - 使用systemConfig表存储
+    const apiKeyConfigs = await prisma.systemConfig.findMany({
+      where: {
+        tenantId: req.user!.tenantId,
+        key: { startsWith: 'api_key_' }
+      }
+    });
+
+    // 解析API密钥数据
+    const apiKeys = apiKeyConfigs.map(config => {
+      try {
+        const keyData = JSON.parse(config.value);
+        return {
+          id: config.key.replace('api_key_', ''),
+          name: keyData.name,
+          key: keyData.key,
+          permissions: keyData.permissions,
+          createdAt: config.createdAt,
+          updatedAt: config.updatedAt,
+          expiresAt: keyData.expiresAt
+        };
+      } catch (e) {
+        return {
+          id: config.key.replace('api_key_', ''),
+          name: '解析错误',
+          key: '',
+          permissions: [],
+          createdAt: config.createdAt
+        };
+      }
+    });
+
+    success(res, { list: apiKeys }, 'API密钥列表获取成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 创建API密钥
+router.post('/api-keys', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const { name, permissions, expiresAt } = req.body;
+
+    // 生成API密钥
+    const apiKey = `ltd_${Date.now()}_${Math.random().toString(36).substring(2, 15)}_${Math.random().toString(36).substring(2, 15)}`;
+    
+    const apiKeyData = {
+      name,
+      key: apiKey,
+      permissions: permissions || [],
+      createdAt: new Date(),
+      expiresAt: expiresAt || null
+    };
+
+    await prisma.systemConfig.create({
+      data: {
+        tenantId: req.user!.tenantId,
+        key: `api_key_${apiKey}`,
+        value: JSON.stringify(apiKeyData)
+      }
+    });
+
+    success(res, { apiKey }, 'API密钥创建成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 删除API密钥
+router.delete('/api-keys/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+    await prisma.systemConfig.delete({
+      where: {
+        tenantId_key: {
+          tenantId: req.user!.tenantId,
+          key: `api_key_${id}`
+        }
+      }
+    });
+
+    success(res, null, 'API密钥删除成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// ===== 客户CRM管理 =====
+
+// 获取客户列表
+router.get('/customers', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const { page = '1', pageSize = '20', search, level, stage } = req.query as any;
+    const skip = (Number(page) - 1) * Number(pageSize);
+    
+    const whereConditions: any = {
+      tenantId: req.user!.tenantId
+    };
+    
+    if (search) {
+      whereConditions.OR = [
+        { name: { contains: search as string } },
+        { contactName: { contains: search as string } },
+        { company: { contains: search as string } }
+      ];
+    }
+    
+    if (level) {
+      whereConditions.level = level;
+    }
+    
+    if (stage) {
+      whereConditions.stage = stage;
+    }
+
+    const [customers, total] = await Promise.all([
+      prisma.customer.findMany({
+        where: whereConditions,
+        skip,
+        take: Number(pageSize),
+        orderBy: { createdAt: 'desc' },
+        include: {
+          contacts: true,
+          opportunities: true
+        }
+      }),
+      prisma.customer.count({ where: whereConditions })
+    ]);
+
+    success(res, { list: customers, total, page: Number(page), pageSize: Number(pageSize) }, '客户列表获取成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 获取客户详情
+router.get('/customers/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const customer = await prisma.customer.findUnique({
+      where: { id, tenantId: req.user!.tenantId },
+      include: {
+        contacts: true,
+        opportunities: true
+      }
+    });
+
+    if (!customer) {
+      return notFound(res, '客户不存在');
+    }
+
+    success(res, customer, '客户详情获取成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 创建客户
+router.post('/customers', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const { name, industry, level, stage, contactName, contactPhone, contactEmail, address, website, tags, note } = req.body;
+    
+    const customer = await prisma.customer.create({
+      data: {
+        name,
+        industry,
+        level: level || 'C',
+        stage: stage || 'prospect',
+        contactName,
+        contactPhone,
+        contactEmail,
+        address,
+        website,
+        tags: tags || '',
+        note,
+        tenantId: req.user!.tenantId
+      }
+    });
+
+    success(res, customer, '客户创建成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 更新客户
+router.put('/customers/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const { name, industry, level, stage, contactName, contactPhone, contactEmail, address, website, tags, note } = req.body;
+    
+    const customer = await prisma.customer.update({
+      where: { id, tenantId: req.user!.tenantId },
+      data: { name, industry, level, stage, contactName, contactPhone, contactEmail, address, website, tags, note }
+    });
+
+    success(res, customer, '客户更新成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 删除客户
+router.delete('/customers/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    await prisma.customer.delete({
+      where: { id, tenantId: req.user!.tenantId }
+    });
+
+    success(res, null, '客户删除成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// ===== 线索管理 =====
+
+// 获取线索列表
+router.get('/leads', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const { page = '1', pageSize = '20', search, source, status, priority } = req.query as any;
+    const skip = (Number(page) - 1) * Number(pageSize);
+    
+    const whereConditions: any = {
+      tenantId: req.user!.tenantId
+    };
+    
+    if (search) {
+      whereConditions.OR = [
+        { name: { contains: search as string } },
+        { company: { contains: search as string } },
+        { phone: { contains: search as string } },
+        { email: { contains: search as string } }
+      ];
+    }
+    
+    if (source) {
+      whereConditions.source = source;
+    }
+    
+    if (status) {
+      whereConditions.status = status;
+    }
+    
+    if (priority) {
+      whereConditions.priority = priority;
+    }
+
+    const [leads, total] = await Promise.all([
+      prisma.lead.findMany({
+        where: whereConditions,
+        skip,
+        take: Number(pageSize),
+        orderBy: { createdAt: 'desc' },
+        include: {
+          assignee: true,
+          followUps: true
+        }
+      }),
+      prisma.lead.count({ where: whereConditions })
+    ]);
+
+    success(res, { list: leads, total, page: Number(page), pageSize: Number(pageSize) }, '线索列表获取成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 获取线索详情
+router.get('/leads/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const lead = await prisma.lead.findUnique({
+      where: { id, tenantId: req.user!.tenantId },
+      include: {
+        assignee: true,
+        followUps: true
+      }
+    });
+
+    if (!lead) {
+      return notFound(res, '线索不存在');
+    }
+
+    success(res, lead, '线索详情获取成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 创建线索
+router.post('/leads', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const { name, phone, email, company, position, source, assigneeId, status, priority, tags, note } = req.body;
+    
+    const lead = await prisma.lead.create({
+      data: {
+        name,
+        phone,
+        email,
+        company,
+        position,
+        source: source || 'form',
+        assigneeId,
+        status: status || 'new',
+        priority: priority || 'medium',
+        tags: tags || '',
+        note,
+        tenantId: req.user!.tenantId
+      }
+    });
+
+    success(res, lead, '线索创建成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 更新线索
+router.put('/leads/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const { name, phone, email, company, position, source, assigneeId, status, priority, tags, note } = req.body;
+    
+    const lead = await prisma.lead.update({
+      where: { id, tenantId: req.user!.tenantId },
+      data: { name, phone, email, company, position, source, assigneeId, status, priority, tags, note }
+    });
+
+    success(res, lead, '线索更新成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 删除线索
+router.delete('/leads/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    await prisma.lead.delete({
+      where: { id, tenantId: req.user!.tenantId }
+    });
+
+    success(res, null, '线索删除成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// ===== 商机管理 =====
+
+// 获取商机列表
+router.get('/opportunities', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const { page = '1', pageSize = '20', search, stage, type } = req.query as any;
+    const skip = (Number(page) - 1) * Number(pageSize);
+    
+    const whereConditions: any = {
+      tenantId: req.user!.tenantId
+    };
+    
+    if (search) {
+      whereConditions.title = { contains: search as string };
+    }
+    if (stage && stage !== 'all') {
+      whereConditions.stage = stage;
+    }
+    if (type && type !== 'all') {
+      whereConditions.type = type;
+    }
+
+    const [opportunities, total] = await Promise.all([
+      prisma.opportunity.findMany({
+        where: whereConditions,
+        skip,
+        take: Number(pageSize),
+        orderBy: { createdAt: 'desc' },
+        include: { customer: true }
+      }),
+      prisma.opportunity.count({ where: whereConditions })
+    ]);
+
+    success(res, { list: opportunities, total, page: Number(page), pageSize: Number(pageSize) }, '商机列表获取成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 获取商机详情
+router.get('/opportunities/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const opportunity = await prisma.opportunity.findUnique({
+      where: { id, tenantId: req.user!.tenantId },
+      include: {
+        customer: true
+      }
+    });
+
+    if (!opportunity) {
+      return notFound(res, '商机不存在');
+    }
+
+    success(res, opportunity, '商机详情获取成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 创建商机
+router.post('/opportunities', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const { customerId, title, type, amount, budget, stage, probability, deadline, counterparty, cooperationMode, industry, description, expectedCloseDate, note } = req.body;
+    
+    const opportunity = await prisma.opportunity.create({
+      data: {
+        customerId,
+        title,
+        type: type || 'supply_demand',
+        amount: Number(amount) || 0,
+        budget: budget ? Number(budget) : undefined,
+        stage: stage || 'pending',
+        probability: Number(probability) || 50,
+        deadline: deadline ? new Date(deadline) : undefined,
+        counterparty,
+        cooperationMode,
+        industry,
+        description,
+        expectedCloseDate: expectedCloseDate ? new Date(expectedCloseDate) : undefined,
+        note,
+        tenantId: req.user!.tenantId
+      }
+    });
+
+    success(res, opportunity, '商机创建成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 更新商机
+router.put('/opportunities/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const { title, type, amount, budget, stage, probability, deadline, counterparty, cooperationMode, industry, description, expectedCloseDate, note, wonAt, lostAt, lostReason } = req.body;
+    
+    const updateData: any = { title, type, amount: amount ? Number(amount) : undefined, stage, probability: probability ? Number(probability) : undefined, counterparty, cooperationMode, industry, description, note, lostReason };
+    if (budget !== undefined) updateData.budget = budget ? Number(budget) : null;
+    if (deadline) updateData.deadline = new Date(deadline);
+    if (expectedCloseDate) updateData.expectedCloseDate = new Date(expectedCloseDate);
+    if (wonAt) updateData.wonAt = new Date(wonAt);
+    if (lostAt) updateData.lostAt = new Date(lostAt);
+    
+    const opportunity = await prisma.opportunity.update({
+      where: { id, tenantId: req.user!.tenantId },
+      data: updateData
+    });
+
+    success(res, opportunity, '商机更新成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 删除商机
+router.delete('/opportunities/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    await prisma.opportunity.delete({
+      where: { id, tenantId: req.user!.tenantId }
+    });
+
+    success(res, null, '商机删除成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 商机统计
+router.get('/opportunities/stats', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const [total, pending, following, won, totalAmountResult, wonAmountResult] = await Promise.all([
+      prisma.opportunity.count({ where: { tenantId } }),
+      prisma.opportunity.count({ where: { tenantId, stage: 'pending' } }),
+      prisma.opportunity.count({ where: { tenantId, stage: 'following' } }),
+      prisma.opportunity.count({ where: { tenantId, stage: 'won' } }),
+      prisma.opportunity.aggregate({ where: { tenantId }, _sum: { amount: true } }),
+      prisma.opportunity.aggregate({ where: { tenantId, stage: 'won' }, _sum: { amount: true } })
+    ]);
+    const totalAmount = totalAmountResult._sum.amount || 0;
+    const wonAmount = wonAmountResult._sum.amount || 0;
+    const conversionRate = total > 0 ? (won / total) * 100 : 0;
+    success(res, { total, pending, following, won, totalAmount, wonAmount, conversionRate }, '商机统计获取成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 商机看板数据
+router.get('/opportunities/board', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const [total, totalAmountResult, wonAmountResult, allOpps] = await Promise.all([
+      prisma.opportunity.count({ where: { tenantId } }),
+      prisma.opportunity.aggregate({ where: { tenantId }, _sum: { amount: true } }),
+      prisma.opportunity.aggregate({ where: { tenantId, stage: 'won' }, _sum: { amount: true } }),
+      prisma.opportunity.findMany({ where: { tenantId }, orderBy: { createdAt: 'desc' }, take: 10 })
+    ]);
+    
+    const totalAmount = totalAmountResult._sum.amount || 0;
+    const wonAmount = wonAmountResult._sum.amount || 0;
+    const won = allOpps.filter(o => o.stage === 'won').length;
+    const conversionRate = total > 0 ? (won / total) * 100 : 0;
+    
+    // 按类型统计
+    const byType: Record<string, number> = { supply_demand: 0, bidding: 0, trade: 0, resource: 0 };
+    const byTypeAmount: Record<string, number> = { supply_demand: 0, bidding: 0, trade: 0, resource: 0 };
+    const byStage: Record<string, number> = { pending: 0, following: 0, proposal: 0, negotiation: 0, won: 0, lost: 0 };
+    
+    // 需要全量查询来计算分类统计
+    const allOpportunities = await prisma.opportunity.findMany({ where: { tenantId } });
+    allOpportunities.forEach(opp => {
+      if (byType[opp.type] !== undefined) byType[opp.type]++;
+      if (byTypeAmount[opp.type] !== undefined) byTypeAmount[opp.type] += opp.amount;
+      if (byStage[opp.stage] !== undefined) byStage[opp.stage]++;
+    });
+    
+    success(res, { total, totalAmount, wonAmount, conversionRate, byType, byTypeAmount, byStage, recentOpps: allOpps.slice(0, 10) }, '商机看板数据获取成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 线索统计
+router.get('/leads/stats', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const [total, newLeads, following, converted] = await Promise.all([
+      prisma.lead.count({ where: { tenantId } }),
+      prisma.lead.count({ where: { tenantId, status: 'new' } }),
+      prisma.lead.count({ where: { tenantId, status: 'following' } }),
+      prisma.lead.count({ where: { tenantId, status: 'won' } })
+    ]);
+    success(res, { total, new: newLeads, following, converted }, '线索统计获取成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 线索转化为客户
+router.post('/leads/:id/convert', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const lead = await prisma.lead.findUnique({ where: { id } });
+    if (!lead) return notFound(res, '线索不存在');
+    
+    // 创建客户
+    const customer = await prisma.customer.create({
+      data: {
+        name: lead.company || lead.name,
+        contactName: lead.name,
+        contactPhone: lead.phone,
+        contactEmail: lead.email,
+        tenantId: lead.tenantId,
+        leadId: lead.id,
+        stage: 'active',
+        level: 'C',
+        tags: lead.tags || ''
+      }
+    });
+    
+    // 更新线索状态
+    await prisma.lead.update({
+      where: { id },
+      data: { status: 'qualified', convertedAt: new Date() }
+    });
+    
+    success(res, customer, '线索已转化为客户');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 客户统计
+router.get('/customers/stats', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const [total, active, prospect, churned] = await Promise.all([
+      prisma.customer.count({ where: { tenantId } }),
+      prisma.customer.count({ where: { tenantId, stage: 'active' } }),
+      prisma.customer.count({ where: { tenantId, stage: 'prospect' } }),
+      prisma.customer.count({ where: { tenantId, stage: 'churned' } })
+    ]);
+    success(res, { total, active, prospect, churned }, '客户统计获取成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// ===== 建站中心管理 =====
+
+// 获取站点列表
+router.get('/sites', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const { page = '1', pageSize = '20', search, type, status } = req.query as any;
+    const skip = (Number(page) - 1) * Number(pageSize);
+    
+    const whereConditions: any = {
+      tenantId: req.user!.tenantId
+    };
+    
+    if (search) {
+      whereConditions.name = { contains: search as string };
+    }
+    
+    if (type) {
+      whereConditions.type = type;
+    }
+    
+    if (status) {
+      whereConditions.status = status;
+    }
+
+    const [sites, total] = await Promise.all([
+      prisma.site.findMany({
+        where: whereConditions,
+        skip,
+        take: Number(pageSize),
+        orderBy: { createdAt: 'desc' },
+        include: {
+          pages: true,
+          forms: true
+        }
+      }),
+      prisma.site.count({ where: whereConditions })
+    ]);
+
+    success(res, { list: sites, total, page: Number(page), pageSize: Number(pageSize) }, '站点列表获取成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 获取站点详情
+router.get('/sites/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const site = await prisma.site.findUnique({
+      where: { id, tenantId: req.user!.tenantId },
+      include: {
+        pages: true,
+        forms: true
+      }
+    });
+
+    if (!site) {
+      return notFound(res, '站点不存在');
+    }
+
+    success(res, site, '站点详情获取成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 创建站点
+router.post('/sites', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const { name, type, domain, seoTitle, seoDesc, seoKeywords, config } = req.body;
+    
+    const site = await prisma.site.create({
+      data: {
+        name,
+        type,
+        domain,
+        seoTitle,
+        seoDesc,
+        seoKeywords,
+        config,
+        tenantId: req.user!.tenantId
+      }
+    });
+
+    success(res, site, '站点创建成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 更新站点
+router.put('/sites/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const { name, type, domain, seoTitle, seoDesc, seoKeywords, config, status } = req.body;
+    
+    const site = await prisma.site.update({
+      where: { id, tenantId: req.user!.tenantId },
+      data: { name, type, domain, seoTitle, seoDesc, seoKeywords, config, status }
+    });
+
+    success(res, site, '站点更新成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 删除站点
+router.delete('/sites/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    await prisma.site.delete({
+      where: { id, tenantId: req.user!.tenantId }
+    });
+
+    success(res, null, '站点删除成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// ===== 商品管理 =====
+
+// 获取商品列表
+router.get('/products', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const { page = '1', pageSize = '20', search, category, status } = req.query as any;
+    const skip = (Number(page) - 1) * Number(pageSize);
+    
+    const whereConditions: any = {
+      tenantId: req.user!.tenantId
+    };
+    
+    if (search) {
+      whereConditions.name = { contains: search as string };
+    }
+    
+    if (category) {
+      whereConditions.category = category;
+    }
+    
+    if (status) {
+      whereConditions.status = status;
+    }
+
+    const [products, total] = await Promise.all([
+      prisma.product.findMany({
+        where: whereConditions,
+        skip,
+        take: Number(pageSize),
+        orderBy: { createdAt: 'desc' },
+        include: {
+          skus: true
+        }
+      }),
+      prisma.product.count({ where: whereConditions })
+    ]);
+
+    success(res, { list: products, total, page: Number(page), pageSize: Number(pageSize) }, '商品列表获取成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 获取商品详情
+router.get('/products/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const product = await prisma.product.findUnique({
+      where: { id, tenantId: req.user!.tenantId },
+      include: {
+        skus: true
+      }
+    });
+
+    if (!product) {
+      return notFound(res, '商品不存在');
+    }
+
+    success(res, product, '商品详情获取成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 创建商品
+router.post('/products', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const { name, description, coverImage, images, price, originalPrice, stock, category, tags, externalUrl, status } = req.body;
+    
+    const product = await prisma.product.create({
+      data: {
+        name,
+        description,
+        coverImage,
+        images: images || '',
+        price: Number(price),
+        originalPrice: originalPrice ? Number(originalPrice) : undefined,
+        stock: Number(stock) || 0,
+        category,
+        tags: tags || '',
+        status: status || 'draft',
+        tenantId: req.user!.tenantId
+      }
+    });
+
+    success(res, product, '商品创建成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 更新商品
+router.put('/products/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const { name, description, coverImage, images, price, originalPrice, stock, category, tags, externalUrl, status } = req.body;
+    
+    const product = await prisma.product.update({
+      where: { id, tenantId: req.user!.tenantId },
+      data: { name, description, coverImage, images, price: Number(price), originalPrice: originalPrice ? Number(originalPrice) : undefined, stock: Number(stock), category, tags, status }
+    });
+
+    success(res, product, '商品更新成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 删除商品
+router.delete('/products/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    await prisma.product.delete({
+      where: { id, tenantId: req.user!.tenantId }
+    });
+
+    success(res, null, '商品删除成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// ===== 商城审核管理 =====
+
+// 获取商城审核统计
+router.get('/mall-review/stats', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const [total, pendingCount, approvedCount, rejectedCount] = await Promise.all([
+      prisma.externalWebsite.count({ where: { tenantId } }),
+      prisma.externalWebsite.count({ where: { tenantId, reviewStatus: 'pending' } }),
+      prisma.externalWebsite.count({ where: { tenantId, reviewStatus: 'approved' } }),
+      prisma.externalWebsite.count({ where: { tenantId, reviewStatus: 'rejected' } }),
+    ]);
+    success(res, { total, pendingCount, approvedCount, rejectedCount }, '商城审核统计获取成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 获取商城审核列表
+router.get('/mall-review', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const { reviewStatus, search } = req.query as any;
+    const where: any = { tenantId: req.user!.tenantId };
+    if (reviewStatus) where.reviewStatus = reviewStatus;
+    if (search) {
+      where.OR = [
+        { name: { contains: search } },
+        { url: { contains: search } },
+        { contactName: { contains: search } },
+      ];
+    }
+    const websites = await prisma.externalWebsite.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: { products: { take: 5, orderBy: { price: 'desc' } } },
+    });
+    success(res, websites, '商城审核列表获取成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 审核商城 - 通过/驳回
+router.put('/mall-review/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const { reviewStatus, reviewNote, status } = req.body;
+    const website = await prisma.externalWebsite.update({
+      where: { id: req.params.id },
+      data: {
+        reviewStatus,
+        reviewNote,
+        status: reviewStatus === 'approved' ? 'active' : reviewStatus === 'rejected' ? 'inactive' : undefined,
+      },
+    });
+    success(res, website, reviewStatus === 'approved' ? '商城审核通过' : '商城已驳回');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 新增商城提交
+router.post('/mall-review', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const { name, url, platform, contactName, contactPhone, contactEmail } = req.body;
+    const website = await prisma.externalWebsite.create({
+      data: {
+        tenantId: req.user!.tenantId,
+        name, url, platform,
+        contactName, contactPhone, contactEmail,
+        reviewStatus: 'pending',
+        status: 'inactive',
+      },
+    });
+    success(res, website, '商城提交成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 删除商城
+router.delete('/mall-review/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    await prisma.externalWebsite.delete({ where: { id: req.params.id } });
+    success(res, null, '商城删除成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// ===== 爆品链接推广 =====
+
+// 获取爆品推广统计
+router.get('/hot-products/stats', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const [totalProducts, promotedCount, totalClicks, totalLeads] = await Promise.all([
+      prisma.product.count({ where: { tenantId } }),
+      prisma.product.count({ where: { tenantId, status: 'active' } }),
+      prisma.trackingLink.aggregate({ _sum: { clickCount: true }, where: {} }),
+      prisma.trackingLink.aggregate({ _sum: { leadCount: true }, where: {} }),
+    ]);
+    success(res, {
+      totalProducts,
+      promotedCount,
+      totalClicks: totalClicks._sum.clickCount || 0,
+      totalLeads: totalLeads._sum.leadCount || 0,
+    }, '爆品推广统计获取成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 获取爆品列表（含推广链接）
+router.get('/hot-products', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const { search, status } = req.query as any;
+    const where: any = { tenantId: req.user!.tenantId };
+    if (search) where.name = { contains: search };
+    if (status) where.status = status;
+    const products = await prisma.product.findMany({
+      where,
+      orderBy: { salesCount: 'desc' },
+      include: { skus: true },
+    });
+    // 获取所有相关的追踪链接
+    const productIds = products.map(p => p.id);
+    const trackingLinks = await prisma.trackingLink.findMany({
+      where: { articleId: { in: productIds } },
+    });
+    const linkMap: Record<string, any[]> = {};
+    trackingLinks.forEach(link => {
+      if (!linkMap[link.articleId!]) linkMap[link.articleId!] = [];
+      linkMap[link.articleId!].push(link);
+    });
+    const result = products.map(p => ({
+      ...p,
+      trackingLinks: linkMap[p.id] || [],
+    }));
+    success(res, result, '爆品列表获取成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 为爆品生成推广链接
+router.post('/hot-products/promote', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const { productId, targetUrl, utmSource, utmMedium, utmCampaign } = req.body;
+    const shortCode = Math.random().toString(36).substring(2, 10);
+    const link = await prisma.trackingLink.create({
+      data: {
+        articleId: productId,
+        shortCode,
+        targetUrl: targetUrl || '',
+        utmSource,
+        utmMedium,
+        utmCampaign,
+      },
+    });
+    success(res, { ...link, shortUrl: `/s/${shortCode}` }, '推广链接生成成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 删除推广链接
+router.delete('/hot-products/promote/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    await prisma.trackingLink.delete({ where: { id: req.params.id } });
+    success(res, null, '推广链接删除成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 更新商品状态（上架/下架）
+router.put('/hot-products/:id/status', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const { status } = req.body;
+    const product = await prisma.product.update({
+      where: { id: req.params.id, tenantId: req.user!.tenantId },
+      data: { status },
+    });
+    success(res, product, status === 'active' ? '商品已上架' : '商品已下架');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// ===== 图片管理接口 =====
+
+// 获取图片列表
+router.get('/images', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const { page = '1', pageSize = '20', search, siteId } = req.query as any;
+    const skip = (Number(page) - 1) * Number(pageSize);
+    
+    const whereConditions: any = {};
+    
+    // MediaAsset 通过 siteId 关联，需要查询租户下的站点
+    const tenantSites = await prisma.site.findMany({
+      where: { tenantId: req.user!.tenantId },
+      select: { id: true }
+    });
+    const siteIds = tenantSites.map(s => s.id);
+    whereConditions.siteId = { in: siteIds };
+    
+    if (search) {
+      whereConditions.name = { contains: search };
+    }
+    if (siteId) {
+      whereConditions.siteId = siteId;
+    }
+    // 只查询图片类型
+    whereConditions.type = 'image';
+
+    const [images, total] = await Promise.all([
+      prisma.mediaAsset.findMany({
+        where: whereConditions,
+        skip,
+        take: Number(pageSize),
+        orderBy: { createdAt: 'desc' }
+      }),
+      prisma.mediaAsset.count({ where: whereConditions })
+    ]);
+
+    success(res, { list: images, total, page: Number(page), pageSize: Number(pageSize) }, '图片列表获取成功');
+  } catch (error: any) {
+    console.error('Error fetching images:', error);
+    fail(res, error.message);
+  }
+});
+
+// 删除图片
+router.delete('/images/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    await prisma.mediaAsset.delete({ where: { id } });
+    success(res, null, '图片删除成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// ===== 员工档案管理接口 =====
+
+// 获取员工统计
+router.get('/employees/stats', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const [total, activeCount, departmentCounts] = await Promise.all([
+      prisma.employeeCard.count({ where: { tenantId } }),
+      prisma.employeeCard.count({ where: { tenantId } }),
+      prisma.employeeCard.groupBy({
+        by: ['department'],
+        where: { tenantId },
+        _count: { department: true }
+      })
+    ]);
+    const deptMap: Record<string, number> = {};
+    departmentCounts.forEach((d: any) => { if (d.department) deptMap[d.department] = d._count.department; });
+    success(res, { total, activeCount, departmentCounts: deptMap }, '员工统计获取成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 获取员工列表
+router.get('/employees', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const { page = '1', pageSize = '20', search, department } = req.query as any;
+    const skip = (Number(page) - 1) * Number(pageSize);
+    const whereConditions: any = { tenantId: req.user!.tenantId };
+    if (search) {
+      whereConditions.OR = [
+        { name: { contains: search } },
+        { email: { contains: search } },
+        { phone: { contains: search } }
+      ];
+    }
+    if (department && department !== 'all') {
+      whereConditions.department = department;
+    }
+    const [employees, total] = await Promise.all([
+      prisma.employeeCard.findMany({
+        where: whereConditions,
+        skip,
+        take: Number(pageSize),
+        orderBy: { createdAt: 'desc' },
+        include: { user: { select: { name: true, email: true, role: true, status: true } } }
+      }),
+      prisma.employeeCard.count({ where: whereConditions })
+    ]);
+    success(res, { list: employees, total, page: Number(page), pageSize: Number(pageSize) }, '员工列表获取成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 获取员工详情
+router.get('/employees/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const employee = await prisma.employeeCard.findUnique({
+      where: { id, tenantId: req.user!.tenantId },
+      include: { user: { select: { name: true, email: true, role: true, phone: true, department: true, status: true } } }
+    });
+    if (!employee) return notFound(res, '员工不存在');
+    success(res, employee, '员工详情获取成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 创建员工档案
+router.post('/employees', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const { name, title, department, phone, email, avatar } = req.body;
+    const employee = await prisma.employeeCard.create({
+      data: {
+        name,
+        title,
+        department,
+        phone,
+        email,
+        avatar,
+        tenantId: req.user!.tenantId,
+        userId: req.user!.userId
+      }
+    });
+    success(res, employee, '员工档案创建成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 更新员工档案
+router.put('/employees/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const { name, title, department, phone, email, avatar } = req.body;
+    const employee = await prisma.employeeCard.update({
+      where: { id, tenantId: req.user!.tenantId },
+      data: { name, title, department, phone, email, avatar }
+    });
+    success(res, employee, '员工档案更新成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 删除员工档案
+router.delete('/employees/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    await prisma.employeeCard.delete({ where: { id, tenantId: req.user!.tenantId } });
+    success(res, null, '员工档案删除成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// ===== 内容管理接口（图文/视频/白皮书） =====
+
+// 获取内容统计
+router.get('/articles/stats', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const [total, articleCount, videoCount, whitepaperCount, publishedCount, draftCount] = await Promise.all([
+      prisma.article.count({ where: { tenantId } }),
+      prisma.article.count({ where: { tenantId, type: 'article' } }),
+      prisma.article.count({ where: { tenantId, type: 'video' } }),
+      prisma.article.count({ where: { tenantId, type: 'whitepaper' } }),
+      prisma.article.count({ where: { tenantId, status: 'published' } }),
+      prisma.article.count({ where: { tenantId, status: 'draft' } }),
+    ]);
+    success(res, { total, articleCount, videoCount, whitepaperCount, publishedCount, draftCount }, '内容统计获取成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 获取内容列表
+router.get('/articles', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const { page = '1', pageSize = '20', search, status, type } = req.query as any;
+    const skip = (Number(page) - 1) * Number(pageSize);
+    
+    const whereConditions: any = { tenantId: req.user!.tenantId };
+    
+    if (search) {
+      whereConditions.OR = [
+        { title: { contains: search } },
+        { summary: { contains: search } }
+      ];
+    }
+    if (status && status !== 'all') {
+      whereConditions.status = status;
+    }
+    if (type && type !== 'all') {
+      whereConditions.type = type;
+    }
+
+    const [articles, total] = await Promise.all([
+      prisma.article.findMany({
+        where: whereConditions,
+        skip,
+        take: Number(pageSize),
+        orderBy: { createdAt: 'desc' }
+      }),
+      prisma.article.count({ where: whereConditions })
+    ]);
+
+    success(res, { list: articles, total, page: Number(page), pageSize: Number(pageSize) }, '内容列表获取成功');
+  } catch (error: any) {
+    console.error('Error fetching articles:', error);
+    fail(res, error.message);
+  }
+});
+
+// 创建内容
+router.post('/articles', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const { title, type, status, coverImage, summary, content, videoUrl, documentUrl, tags } = req.body;
+    const article = await prisma.article.create({
+      data: {
+        title,
+        type: type || 'article',
+        status: status || 'draft',
+        coverImage,
+        summary,
+        content,
+        videoUrl,
+        documentUrl,
+        tags: Array.isArray(tags) ? tags.join(',') : (tags || ''),
+        tenantId: req.user!.tenantId,
+        authorId: req.user!.userId,
+        publishedAt: status === 'published' ? new Date() : null
+      }
+    });
+    success(res, article, '内容创建成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 更新内容
+router.put('/articles/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const { title, type, status, coverImage, summary, content, videoUrl, documentUrl, tags } = req.body;
+    
+    const updateData: any = { title, type, status, coverImage, summary, content, videoUrl, documentUrl };
+    if (tags !== undefined) {
+      updateData.tags = Array.isArray(tags) ? tags.join(',') : tags;
+    }
+    if (status === 'published') {
+      updateData.publishedAt = new Date();
+    }
+    
+    const article = await prisma.article.update({
+      where: { id, tenantId: req.user!.tenantId },
+      data: updateData
+    });
+    success(res, article, '内容更新成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 删除内容
+router.delete('/articles/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    await prisma.article.delete({ where: { id, tenantId: req.user!.tenantId } });
+    success(res, null, '内容删除成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// ===== 统计数据接口 =====
+
+// 获取系统统计数据
+router.get('/stats', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    
+    // 获取各种统计数据 - 对应仪表盘八大模块
+    const [
+      totalSites,         // 站点总数
+      externalSites,      // 接入外部网站
+      ownPortals,         // 企业自有门户
+      builtPages,         // 搭建页面数
+      leads,              // 商机线索
+      customers,          // 收录客户
+      articles,           // 文章推广
+      videos,             // 视频推广
+      whitepapers,        // 白皮书
+      onlineStaff,        // 线上人员
+      mallSites,          // 自有商城
+      seoOptimized,       // SEO优化站点
+      dataSites,          // 数据站接入
+      totalVisits,        // 总访问量
+      todayVisits         // 今日访问
+    ] = await Promise.all([
+      prisma.site.count({ where: { tenantId } }),
+      Promise.resolve(0),  // TODO: 外部网站统计
+      Promise.resolve(0),  // TODO: 自有门户统计
+      Promise.resolve(0),  // TODO: 搭建页面统计
+      Promise.resolve(0),  // TODO: 商机线索统计
+      Promise.resolve(0),  // TODO: 客户统计
+      Promise.resolve(0),  // TODO: 文章推广统计
+      Promise.resolve(0),  // TODO: 视频推广统计
+      Promise.resolve(0),  // TODO: 白皮书统计
+      Promise.resolve(0),  // TODO: 线上人员统计
+      Promise.resolve(0),  // TODO: 商城统计
+      Promise.resolve(0),  // TODO: SEO优化统计
+      Promise.resolve(0),  // TODO: 数据站接入统计
+      Promise.resolve(0),  // TODO: 总访问量统计
+      Promise.resolve(0),  // TODO: 今日访问统计
+    ]);
+    
+    const statsData = {
+      externalSites,
+      ownPortals,
+      builtPages,
+      leads,
+      customers,
+      articles,
+      videos,
+      whitepapers,
+      onlineStaff,
+      mallSites,
+      seoOptimized,
+      seoScore: 0,
+      dataSites,
+      totalVisits,
+      todayVisits,
+    };
+    
+    success(res, statsData, '统计数据获取成功');
+  } catch (error: any) {
+    console.error('Error fetching stats:', error);
+    fail(res, error.message);
+  }
+});
+
+// ===== 后端管理员管理 =====
+
+// 获取管理员列表
+router.get('/admin-users', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const { page = '1', pageSize = '20', search } = req.query as any;
+    const skip = (Number(page) - 1) * Number(pageSize);
+    
+    const whereConditions: any = {
+      tenantId: req.user!.tenantId,
+      role: { in: ['admin', 'super_admin', 'operator'] }
+    };
+    
+    if (search) {
+      whereConditions.OR = [
+        { name: { contains: search as string } },
+        { email: { contains: search as string } }
+      ];
+    }
+
+    const [adminUsers, total] = await Promise.all([
+      prisma.user.findMany({
+        where: whereConditions,
+        skip,
+        take: Number(pageSize),
+        orderBy: { createdAt: 'desc' }
+      }),
+      prisma.user.count({ where: whereConditions })
+    ]);
+
+    success(res, { list: adminUsers, total, page: Number(page), pageSize: Number(pageSize) }, '管理员列表获取成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 创建管理员
+router.post('/admin-users', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const { name, email, phone, role, status, password } = req.body;
+    
+    const existingUser = await prisma.user.findFirst({ where: { email, tenantId: req.user!.tenantId } });
+    if (existingUser) {
+      return fail(res, '该邮箱已被注册');
+    }
+
+    const bcrypt = require('bcryptjs');
+    const hashedPassword = await bcrypt.hash(password || 'Admin@123', 10);
+    
+    const adminUser = await prisma.user.create({
+      data: {
+        name,
+        email,
+        phone,
+        role: role || 'admin',
+        status: status || 'active',
+        password: hashedPassword,
+        tenantId: req.user!.tenantId
+      }
+    });
+
+    success(res, adminUser, '管理员创建成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 更新管理员
+router.put('/admin-users/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const { name, phone, role, status } = req.body;
+    
+    const adminUser = await prisma.user.update({
+      where: { id },
+      data: { name, phone, role, status }
+    });
+
+    success(res, adminUser, '管理员更新成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 删除管理员
+router.delete('/admin-users/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    await prisma.user.delete({ where: { id } });
+    success(res, null, '管理员删除成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+export { router as adminRouter };
