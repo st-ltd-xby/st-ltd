@@ -18,6 +18,7 @@ import LeadManagement from './pages/LeadManagement';
 import OpportunityManagement from './pages/OpportunityManagement';
 import OpportunityBoard from './pages/OpportunityBoard';
 import RegistrationReview from './pages/RegistrationReview';
+import AIAgent from './pages/AIAgent';
 import PrivateRoute from './components/PrivateRoute';
 
 const App: React.FC = () => {
@@ -43,6 +44,7 @@ const App: React.FC = () => {
             <Route path="promotion" element={<PrivateRoute><PromotionCenter /></PrivateRoute>} />
             <Route path="registrations" element={<PrivateRoute><RegistrationReview /></PrivateRoute>} />
             <Route path="settings" element={<PrivateRoute><SystemSettings /></PrivateRoute>} />
+                        <Route path="ai-agent" element={<PrivateRoute><AIAgent /></PrivateRoute>} />
           </Route>
         </Routes>
       </Router>

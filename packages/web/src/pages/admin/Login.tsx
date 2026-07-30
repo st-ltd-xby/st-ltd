@@ -25,7 +25,7 @@ const AdminLogin: React.FC = () => {
         password: values.password
       });
 
-      if (response.data.code === 200) {
+      if (response.data.code === 0 || response.data.code === 200) {
         // 存储管理员token
         localStorage.setItem('adminToken', response.data.data.token);
         localStorage.setItem('adminUserInfo', JSON.stringify(response.data.data.user));

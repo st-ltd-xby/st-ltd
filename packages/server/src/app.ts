@@ -1,9 +1,9 @@
+import path from 'path';
 import dotenv from 'dotenv';
 dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
 import express, { Application } from 'express';
 import cors from 'cors';
-import path from 'path';
 import rateLimit from 'express-rate-limit';
 import swaggerUi from 'swagger-ui-express';
 import { errorHandler, notFoundHandler } from './middleware/error';
@@ -21,6 +21,7 @@ import promotionRoutes from './modules/promotion/promotion.routes';
 import { adminRouter } from './modules/admin/admin.routes';
 import adminAuthRoutes from './modules/admin/admin.auth.routes';
 import uploadRoutes from './modules/upload/upload.routes';
+import agentRoutes from './modules/agent/agent.routes';
 
 const app: Application = express();
 const PORT = process.env.PORT || 3000;
@@ -56,6 +57,7 @@ app.use('/api/v1', dashboardRoutes);
 app.use('/api/v1/promotion', promotionRoutes);
 app.use('/api/v1/admin', adminRouter);
 app.use('/api/v1', uploadRoutes);
+app.use('/api/v1/agent', agentRoutes);
 
 // 静态文件服务 - 上传目录
 app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')));
@@ -97,8 +99,8 @@ async function start() {
   });
 }
 
-// 仅在非 Vercel 环境自动启动
-if (!process.env.VERCEL) {
+// 仅在本地开发环境自动启动（Vercel / 阿里云 FC 等 Serverless 环境不启动）
+if (!process.env.VERCEL && !process.env.FC_FUNCTION_NAME) {
   start();
 }
 

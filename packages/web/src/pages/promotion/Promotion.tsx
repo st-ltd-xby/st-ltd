@@ -8,6 +8,7 @@ import {
   LinkOutlined, QrcodeOutlined, MailOutlined, SearchOutlined,
   PlusOutlined, CopyOutlined, DeleteOutlined, SendOutlined,
   BarChartOutlined, EyeOutlined, CheckCircleOutlined, EditOutlined,
+  UploadOutlined,
 } from '@ant-design/icons';
 import { promotionApi, cmsApi } from '../../services/api';
 
@@ -194,7 +195,21 @@ function QrCodeGenerator() {
     if (!instantUrl) return;
     try {
       const res: any = await promotionApi.generateQrCode({ url: instantUrl });
-      if (res.code === 0) setInstantQr(res.data.imageUrl);
+      if (res.code === 0) {
+        setInstantQr(res.data.imageUrl);
+        // 自动同步保存到后台存储
+        const name = instantUrl.replace(/^https?:\/\//, '').replace(/\//g, '-').slice(0, 30) || '快速二维码';
+        try {
+          const saveRes: any = await promotionApi.createQrCode({
+            name: `${name}_${new Date().toLocaleTimeString()}`,
+            targetUrl: instantUrl.startsWith('http') ? instantUrl : `https://${instantUrl}`,
+          });
+          if (saveRes.code === 0) {
+            message.success('二维码已生成并自动保存');
+            loadQrcodes();
+          }
+        } catch { /* 保存失败不影响预览 */ }
+      }
     } catch { message.error('生成失败'); }
   };
 

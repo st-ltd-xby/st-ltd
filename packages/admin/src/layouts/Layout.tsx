@@ -7,7 +7,7 @@ import {
   UserOutlined, LogoutOutlined, FundOutlined, FireOutlined,
   ApiOutlined, SafetyCertificateOutlined, CloudSyncOutlined,
   DatabaseOutlined, ToolOutlined, BookOutlined, BellOutlined,
-  MenuFoldOutlined, MenuUnfoldOutlined, UserAddOutlined,
+  MenuFoldOutlined, MenuUnfoldOutlined, UserAddOutlined, RobotOutlined,
 } from '@ant-design/icons';
 import { Layout, Menu, Avatar, Dropdown, Space, Badge, Breadcrumb } from 'antd';
 
@@ -61,6 +61,7 @@ const menuItems = [
       { key: '/admin/promotion?tab=articles', icon: <MessageOutlined />, label: '文章管理' },
     ],
   },
+  { key: '/admin/ai-agent', icon: <RobotOutlined />, label: 'AI智囊' },
   {
     key: 'system-settings', icon: <SettingOutlined />, label: '系统设置',
     children: [
@@ -101,6 +102,7 @@ const menuLabelMap: Record<string, string> = {
   '/admin/settings?tab=integration': '集成设置',
   '/admin/settings?tab=backup': '备份设置',
   '/admin/settings?tab=tools': '系统工具',
+  '/admin/ai-agent': 'AI智囊',
 };
 
 const AdminLayout: React.FC = () => {
