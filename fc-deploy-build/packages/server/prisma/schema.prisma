@@ -1,0 +1,754 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-1.0.x", "debian-openssl-1.1.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id             String          @id @default(cuid())
+  name           String
+  logo           String?
+  phone          String?
+  address        String?
+  domain         String?         @unique
+  plan           String          @default("free")
+  status         String          @default("active")
+  config         String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  articles       Article[]
+  customers      Customer[]
+  employeeCards  EmployeeCard[]
+  leads          Lead[]
+  materials      Material[]
+  products       Product[]
+  promotionTasks PromotionTask[]
+  sites          Site[]
+  tags           Tag[]
+  users          User[]
+}
+
+model User {
+  id            String         @id @default(cuid())
+  tenantId      String
+  email         String
+  password      String
+  name          String
+  avatar        String?
+  phone         String?
+  role          String         @default("staff")
+  department    String?
+  status        String         @default("active")
+  lastLoginAt   DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  employeeCard  EmployeeCard?
+  followUps     FollowUp[]
+  assignedLeads Lead[]         @relation("LeadAssignee")
+  operationLogs OperationLog[]
+  shareRecords  ShareRecord[]
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String
+  code        String
+  permissions String
+  createdAt   DateTime @default(now())
+
+  @@unique([tenantId, code])
+}
+
+model OperationLog {
+  id        String   @id @default(cuid())
+  tenantId  String
+  userId    String
+  action    String
+  module    String
+  targetId  String?
+  detail    String?
+  ip        String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@index([userId])
+}
+
+model Site {
+  id          String       @id @default(cuid())
+  tenantId    String
+  name        String
+  type        String
+  domain      String?      @unique
+  templateId  String?
+  seoTitle    String?
+  seoDesc     String?
+  seoKeywords String?
+  config      String?
+  status      String       @default("draft")
+  publishedAt DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  forms       Form[]
+  mediaAssets MediaAsset[]
+  pages       Page[]
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+model Page {
+  id          String    @id @default(cuid())
+  siteId      String
+  title       String
+  slug        String
+  content     String
+  seoTitle    String?
+  seoDesc     String?
+  seoKeywords String?
+  status      String    @default("draft")
+  version     Int       @default(1)
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  site        Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, slug])
+  @@index([siteId])
+}
+
+model Template {
+  id        String   @id @default(cuid())
+  name      String
+  category  String
+  thumbnail String?
+  content   String
+  config    String?
+  isPremium Boolean  @default(false)
+  sortOrder Int      @default(0)
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Form {
+  id          String           @id @default(cuid())
+  siteId      String
+  name        String
+  description String?
+  fields      String
+  settings    String?
+  status      String           @default("active")
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  site        Site             @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  submissions FormSubmission[]
+
+  @@index([siteId])
+}
+
+model FormSubmission {
+  id        String   @id @default(cuid())
+  formId    String
+  data      String
+  visitorId String?
+  source    String?
+  ip        String?
+  ua        String?
+  createdAt DateTime @default(now())
+  form      Form     @relation(fields: [formId], references: [id], onDelete: Cascade)
+
+  @@index([formId])
+  @@index([createdAt])
+}
+
+model MediaAsset {
+  id        String   @id @default(cuid())
+  siteId    String
+  name      String
+  type      String
+  url       String
+  size      Int
+  mimeType  String
+  width     Int?
+  height    Int?
+  createdAt DateTime @default(now())
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId])
+}
+
+model Visitor {
+  id           String            @id @default(cuid())
+  tenantId     String
+  fingerprint  String?
+  ip           String?
+  ua           String?
+  referrer     String?
+  landingPage  String?
+  utmSource    String?
+  utmMedium    String?
+  utmCampaign  String?
+  firstVisitAt DateTime          @default(now())
+  lastVisitAt  DateTime          @default(now())
+  visitCount   Int               @default(1)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  leads        Lead[]
+  behaviors    VisitorBehavior[]
+
+  @@index([tenantId, lastVisitAt])
+  @@index([fingerprint])
+}
+
+model VisitorBehavior {
+  id        String   @id @default(cuid())
+  visitorId String
+  type      String
+  page      String?
+  data      String?
+  createdAt DateTime @default(now())
+  visitor   Visitor  @relation(fields: [visitorId], references: [id], onDelete: Cascade)
+
+  @@index([visitorId, createdAt])
+}
+
+model Lead {
+  id          String     @id @default(cuid())
+  tenantId    String
+  name        String
+  phone       String?
+  email       String?
+  company     String?
+  position    String?
+  source      String
+  sourceId    String?
+  visitorId   String?
+  assigneeId  String?
+  status      String     @default("new")
+  priority    String     @default("medium")
+  tags        String
+  note        String?
+  convertedAt DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  followUps   FollowUp[]
+  assignee    User?      @relation("LeadAssignee", fields: [assigneeId], references: [id])
+  tenant      Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  visitor     Visitor?   @relation(fields: [visitorId], references: [id])
+
+  @@index([tenantId, status])
+  @@index([tenantId, source])
+  @@index([assigneeId])
+  @@index([createdAt])
+}
+
+model Customer {
+  id            String        @id @default(cuid())
+  tenantId      String
+  name          String
+  industry      String?
+  level         String        @default("C")
+  stage         String        @default("prospect")
+  contactName   String?
+  contactPhone  String?
+  contactEmail  String?
+  address       String?
+  website       String?
+  leadId        String?
+  tags          String
+  totalDeal     Float         @default(0)
+  note          String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  contacts      Contact[]
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  opportunities Opportunity[]
+
+  @@index([tenantId, level])
+  @@index([tenantId, stage])
+}
+
+model Contact {
+  id         String   @id @default(cuid())
+  customerId String
+  name       String
+  phone      String?
+  email      String?
+  position   String?
+  isPrimary  Boolean  @default(false)
+  note       String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+}
+
+model FollowUp {
+  id         String    @id @default(cuid())
+  leadId     String
+  userId     String
+  type       String
+  content    String
+  nextAction String?
+  nextTime   DateTime?
+  createdAt  DateTime  @default(now())
+  lead       Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user       User      @relation(fields: [userId], references: [id])
+
+  @@index([leadId, createdAt])
+}
+
+model Opportunity {
+  id                String    @id @default(cuid())
+  customerId        String
+  tenantId          String
+  title             String
+  type              String    @default("supply_demand")
+  amount            Float
+  budget            Float?
+  stage             String    @default("pending")
+  probability       Int       @default(50)
+  deadline          DateTime?
+  counterparty      String?
+  cooperationMode   String?
+  industry          String?
+  description       String?
+  expectedCloseDate DateTime?
+  leadId            String?
+  note              String?
+  wonAt             DateTime?
+  lostAt            DateTime?
+  lostReason        String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  customer          Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, stage])
+  @@index([tenantId, type])
+  @@index([customerId])
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  color     String   @default("#1677ff")
+  category  String   @default("custom")
+  createdAt DateTime @default(now())
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, name, category])
+}
+
+model Article {
+  id            String         @id @default(cuid())
+  tenantId      String
+  title         String
+  summary       String?
+  content       String
+  coverImage    String?
+  type          String         @default("article")
+  videoUrl      String?
+  documentUrl   String?
+  status        String         @default("draft")
+  publishedAt   DateTime?
+  viewCount     Int            @default(0)
+  shareCount    Int            @default(0)
+  leadCount     Int            @default(0)
+  authorId      String?
+  tags          String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  distributions Distribution[]
+  trackingLinks TrackingLink[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, type])
+}
+
+model Distribution {
+  id            String    @id @default(cuid())
+  articleId     String
+  channel       String
+  channelPostId String?
+  status        String    @default("pending")
+  publishedAt   DateTime?
+  errorMessage  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  article       Article   @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@index([articleId])
+}
+
+model TrackingLink {
+  id          String    @id @default(cuid())
+  articleId   String?
+  shortCode   String    @unique
+  targetUrl   String
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  clickCount  Int       @default(0)
+  leadCount   Int       @default(0)
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  article     Article?  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@index([shortCode])
+}
+
+model EmployeeCard {
+  id         String   @id @default(cuid())
+  tenantId   String
+  userId     String   @unique
+  name       String
+  title      String
+  department String?
+  phone      String?
+  email      String?
+  avatar     String?
+  qrCode     String?
+  viewCount  Int      @default(0)
+  leadCount  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@index([tenantId])
+}
+
+model Material {
+  id           String        @id @default(cuid())
+  tenantId     String
+  title        String
+  type         String
+  url          String
+  thumbnail    String?
+  fileSize     Int?
+  shareCount   Int           @default(0)
+  viewCount    Int           @default(0)
+  leadCount    Int           @default(0)
+  tags         String
+  status       String        @default("active")
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  shareRecords ShareRecord[]
+
+  @@index([tenantId, type])
+}
+
+model ShareRecord {
+  id         String    @id @default(cuid())
+  userId     String
+  materialId String?
+  articleId  String?
+  shareType  String
+  shareUrl   String
+  shortCode  String    @unique
+  viewCount  Int       @default(0)
+  leadCount  Int       @default(0)
+  createdAt  DateTime  @default(now())
+  material   Material? @relation(fields: [materialId], references: [id])
+  user       User      @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([shortCode])
+}
+
+model Product {
+  id            String       @id @default(cuid())
+  tenantId      String
+  name          String
+  description   String?
+  coverImage    String?
+  images        String
+  price         Float
+  originalPrice Float?
+  stock         Int          @default(0)
+  salesCount    Int          @default(0)
+  category      String?
+  tags          String
+  externalUrl   String?
+  status        String       @default("draft")
+  sortOrder     Int          @default(0)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  orderItems    OrderItem[]
+  tenant        Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  skus          ProductSku[]
+
+  @@index([tenantId, status])
+}
+
+model ProductSku {
+  id         String   @id @default(cuid())
+  productId  String
+  name       String
+  price      Float
+  stock      Int      @default(0)
+  attributes String?
+  createdAt  DateTime @default(now())
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+model Order {
+  id           String      @id @default(cuid())
+  tenantId     String
+  orderNo      String      @unique
+  customerId   String?
+  contactName  String?
+  contactPhone String?
+  totalAmount  Float
+  payAmount    Float
+  discount     Float       @default(0)
+  status       String      @default("pending")
+  payMethod    String?
+  paidAt       DateTime?
+  note         String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  items        OrderItem[]
+  payments     Payment[]
+
+  @@index([tenantId, status])
+  @@index([orderNo])
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  productId String
+  skuId     String?
+  name      String
+  price     Float
+  quantity  Int
+  subtotal  Float
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+}
+
+model Payment {
+  id            String    @id @default(cuid())
+  orderId       String
+  transactionId String?
+  amount        Float
+  method        String
+  status        String    @default("pending")
+  paidAt        DateTime?
+  createdAt     DateTime  @default(now())
+  order         Order     @relation(fields: [orderId], references: [id])
+
+  @@index([orderId])
+}
+
+model Member {
+  id         String   @id @default(cuid())
+  tenantId   String
+  name       String
+  phone      String   @unique
+  email      String?
+  avatar     String?
+  level      String   @default("normal")
+  points     Int      @default(0)
+  totalSpent Float    @default(0)
+  customerId String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+model Appointment {
+  id         String   @id @default(cuid())
+  tenantId   String
+  customerId String?
+  name       String
+  phone      String
+  email      String?
+  service    String
+  date       DateTime
+  time       String
+  status     String   @default("pending")
+  note       String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([tenantId, date])
+}
+
+model EmailTemplate {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  subject   String
+  content   String
+  variables String?
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+model EmailCampaign {
+  id           String    @id @default(cuid())
+  tenantId     String
+  name         String
+  templateId   String?
+  subject      String
+  content      String
+  recipients   String
+  totalCount   Int       @default(0)
+  sentCount    Int       @default(0)
+  successCount Int       @default(0)
+  failCount    Int       @default(0)
+  status       String    @default("draft")
+  scheduledAt  DateTime?
+  sentAt       DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([tenantId, status])
+}
+
+model QrCode {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  targetUrl String
+  imageUrl  String?
+  scanCount Int      @default(0)
+  size      Int      @default(300)
+  color     String   @default("#000000")
+  bgColor   String   @default("#ffffff")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+model EmailAddress {
+  id        String   @id @default(cuid())
+  tenantId  String
+  email     String
+  name      String?
+  group     String   @default("default")
+  status    String   @default("active")
+  tags      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([tenantId, group])
+}
+
+model ExternalWebsite {
+  id           String            @id @default(cuid())
+  tenantId     String
+  name         String
+  url          String
+  platform     String
+  apiKey       String?
+  apiSecret    String?
+  syncInterval Int               @default(3600)
+  lastSyncAt   DateTime?
+  status       String            @default("active")
+  reviewStatus String            @default("pending")
+  reviewNote   String?
+  contactName  String?
+  contactPhone String?
+  contactEmail String?
+  config       String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  products     ExternalProduct[]
+  syncLogs     SyncLog[]
+
+  @@index([tenantId])
+}
+
+model ExternalProduct {
+  id             String          @id @default(cuid())
+  websiteId      String
+  externalId     String
+  name           String
+  description    String?
+  coverImage     String?
+  images         String?
+  price          Float
+  originalPrice  Float?
+  stock          Int             @default(0)
+  status         String          @default("active")
+  externalUrl    String?
+  externalData   String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  website        ExternalWebsite @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  promotionTasks PromotionTask[]
+
+  @@unique([websiteId, externalId])
+  @@index([websiteId])
+}
+
+model PromotionTask {
+  id                String          @id @default(cuid())
+  tenantId          String
+  name              String
+  externalProductId String
+  type              String
+  status            String          @default("pending")
+  config            String?
+  result            String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  externalProduct   ExternalProduct @relation(fields: [externalProductId], references: [id], onDelete: Cascade)
+  tenant            Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([externalProductId])
+}
+
+model SyncLog {
+  id        String          @id @default(cuid())
+  websiteId String
+  type      String
+  status    String
+  message   String?
+  details   String?
+  createdAt DateTime        @default(now())
+  website   ExternalWebsite @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@index([websiteId, createdAt])
+}
+
+model SystemConfig {
+  id        String   @id @default(cuid())
+  tenantId  String
+  key       String
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, key])
+}

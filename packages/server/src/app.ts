@@ -81,7 +81,12 @@ app.get('/t/:shortCode', async (req, res) => {
 });
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '1.0.0' });
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '1.0.0', aiTools: 'registered' });
+});
+
+// 临时调试端点 - 确认AI路由是否注册
+app.get('/api/v1/ai/test', (req, res) => {
+  res.json({ code: 0, message: 'AI routes are working!', timestamp: new Date().toISOString() });
 });
 
 app.use(notFoundHandler);
