@@ -95,7 +95,7 @@ export const contentApi = {
   createShareRecord: (data: any) => api.post('/content/share-records', data),
   getShareStats: () => api.get('/content/share-records/stats'),
   // AI 内容扩写
-  aiContentExpand: (data: { content?: string; title?: string; mode?: string }) => api.post('/agent/content-expand', data),
+  aiContentExpand: (data: { content?: string; title?: string; mode?: string }) => api.post('/ai/content-expand', data),
 };
 
 // Mall
@@ -208,5 +208,5 @@ export const promotionApi = {
   autoFixSeo: (siteId: string) => api.post('/promotion/seo/auto-fix', { siteId }),
   exportSeoReport: () => api.get('/promotion/seo/report', { responseType: 'blob' }),
   // AI SEO
-  aiSeoAnalyze: (data: any) => api.post('/agent/seo-analyze', data),
+  aiSeoAnalyze: (data: any) => api.post('/ai/seo-analyze', data),
 };

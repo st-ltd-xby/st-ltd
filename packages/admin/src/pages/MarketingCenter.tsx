@@ -236,7 +236,7 @@ const MarketingCenter: React.FC = () => {
     if (!content && !title) { message.warning('请先输入内容或标题'); return; }
     setAiExpanding(true);
     try {
-      const res = await axios.post(`${API_BASE_URL}/api/v1/agent/content-expand`, { content, title, mode: aiMode }, getToken());
+      const res = await axios.post(`${API_BASE_URL}/api/v1/ai/content-expand`, { content, title, mode: aiMode }, getToken());
       if (res.data.code === 0) {
         contentForm.setFieldsValue({ content: res.data.data.expanded });
         message.success('AI 处理完成');

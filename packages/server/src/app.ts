@@ -22,6 +22,7 @@ import { adminRouter } from './modules/admin/admin.routes';
 import adminAuthRoutes from './modules/admin/admin.auth.routes';
 import uploadRoutes from './modules/upload/upload.routes';
 import agentRoutes from './modules/agent/agent.routes';
+import aiToolsRoutes from './modules/ai-tools/ai-tools.routes';
 
 const app: Application = express();
 const PORT = process.env.PORT || 3000;
@@ -58,6 +59,7 @@ app.use('/api/v1/promotion', promotionRoutes);
 app.use('/api/v1/admin', adminRouter);
 app.use('/api/v1', uploadRoutes);
 app.use('/api/v1/agent', agentRoutes);
+app.use('/api/v1/ai', aiToolsRoutes);
 
 // 静态文件服务 - 上传目录
 app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')));
