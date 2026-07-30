@@ -94,6 +94,8 @@ export const contentApi = {
   createMaterial: (data: any) => api.post('/content/materials', data),
   createShareRecord: (data: any) => api.post('/content/share-records', data),
   getShareStats: () => api.get('/content/share-records/stats'),
+  // AI 内容扩写
+  aiContentExpand: (data: { content?: string; title?: string; mode?: string }) => api.post('/agent/content-expand', data),
 };
 
 // Mall
