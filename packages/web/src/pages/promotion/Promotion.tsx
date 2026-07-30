@@ -8,7 +8,7 @@ import {
   LinkOutlined, QrcodeOutlined, MailOutlined, SearchOutlined,
   PlusOutlined, CopyOutlined, DeleteOutlined, SendOutlined,
   BarChartOutlined, EyeOutlined, CheckCircleOutlined, EditOutlined,
-  UploadOutlined,
+  UploadOutlined, RobotOutlined,
 } from '@ant-design/icons';
 import { promotionApi, cmsApi } from '../../services/api';
 
@@ -548,6 +548,8 @@ function SeoTools() {
   const [fixResult, setFixResult] = useState<any>(null);
   const [editSite, setEditSite] = useState<any>(null);
   const [editForm] = Form.useForm();
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiSuggestion, setAiSuggestion] = useState('');
 
   useEffect(() => { loadAnalysis(); }, []);
 
@@ -645,6 +647,27 @@ function SeoTools() {
     } catch { message.error('获取失败'); }
   };
 
+  const handleAiAnalyze = async (site?: any) => {
+    setAiLoading(true);
+    setAiSuggestion('');
+    try {
+      const res: any = await promotionApi.aiSeoAnalyze({
+        siteName: site?.siteName,
+        domain: site?.domain,
+        seoTitle: site?.seoTitle,
+        seoDesc: site?.seoDesc,
+        seoKeywords: site?.seoKeywords,
+        pages: site?.pages,
+      });
+      if (res.code === 0) {
+        setAiSuggestion(res.data.suggestion);
+      } else {
+        message.error(res.message || 'AI 分析失败');
+      }
+    } catch { message.error('AI 分析请求失败'); }
+    setAiLoading(false);
+  };
+
   const handleExportReport = async () => {
     try {
       const res: any = await promotionApi.exportSeoReport();
@@ -676,6 +699,7 @@ function SeoTools() {
         <Space>
           <Button icon={<SearchOutlined />} onClick={loadAnalysis} loading={loading}>重新分析</Button>
           <Button icon={<BarChartOutlined />} onClick={handleExportReport}>导出报告</Button>
+          <Button icon={<RobotOutlined />} onClick={() => handleAiAnalyze(analysis[0])} loading={aiLoading} style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: '#fff', border: 'none' }}>AI 智能分析</Button>
         </Space>
         <Space>
           <Button onClick={handleDownloadSitemap}>Sitemap.xml</Button>
@@ -707,6 +731,7 @@ function SeoTools() {
                     </Button>
                     <Button size="small" onClick={() => setPreviewSite(site)}>搜索预览</Button>
                     <Button size="small" icon={<EditOutlined />} onClick={() => handleEditSite(site)}>编辑</Button>
+                    <Button size="small" icon={<RobotOutlined />} onClick={() => handleAiAnalyze(site)} style={{ color: '#722ed1', borderColor: '#722ed1' }}>AI分析</Button>
                     <Popconfirm title="确定删除此站点？删除后不可恢复" onConfirm={() => handleDeleteSite(site.siteId)}>
                       <Button size="small" danger icon={<DeleteOutlined />}>删除</Button>
                     </Popconfirm>
@@ -806,6 +831,11 @@ function SeoTools() {
       <Modal title="结构化数据 (JSON-LD)" open={showJsonLd} onCancel={() => setShowJsonLd(false)} footer={<Button onClick={() => downloadText(JSON.stringify(structuredData, null, 2), 'structured-data.json')}>下载文件</Button>} width={700}>
         <Alert message="将以下 JSON-LD 代码添加到网页的 &lt;head&gt; 标签中，可提升搜索结果的展示效果（富摘要）" type="info" showIcon style={{ marginBottom: 12 }} />
         <pre style={{ background: '#f5f5f5', padding: 16, borderRadius: 8, maxHeight: 400, overflow: 'auto', fontSize: 13 }}>{JSON.stringify(structuredData, null, 2)}</pre>
+      </Modal>
+
+      {/* AI 分析结果 */}
+      <Modal title={<span><RobotOutlined style={{ color: '#722ed1' }} /> AI SEO 智能分析建议</span>} open={!!aiSuggestion} onCancel={() => setAiSuggestion('')} footer={<Button onClick={() => setAiSuggestion('')}>关闭</Button>} width={700}>
+        <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.8, fontSize: 14 }}>{aiSuggestion}</div>
       </Modal>
 
       {/* 编辑站点 SEO 信息 */}

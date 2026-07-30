@@ -7,7 +7,8 @@ import {
 import { 
   SearchOutlined, PlusOutlined, EditOutlined, DeleteOutlined, 
   FileTextOutlined, VideoCameraOutlined, BookOutlined,
-  EyeOutlined, TeamOutlined, UserOutlined, PhoneOutlined, MailOutlined
+  EyeOutlined, TeamOutlined, UserOutlined, PhoneOutlined, MailOutlined,
+  RobotOutlined,
 } from '@ant-design/icons';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
@@ -106,6 +107,8 @@ const MarketingCenter: React.FC = () => {
   const [contentForm] = Form.useForm();
 
   const [selectedType, setSelectedType] = useState<string>('article');
+  const [aiExpanding, setAiExpanding] = useState(false);
+  const [aiMode, setAiMode] = useState<string>('expand');
 
   const fetchStats = async () => {
     try {
@@ -226,6 +229,23 @@ const MarketingCenter: React.FC = () => {
   };
 
 
+
+  const handleAiExpand = async () => {
+    const content = contentForm.getFieldValue('content');
+    const title = contentForm.getFieldValue('title');
+    if (!content && !title) { message.warning('请先输入内容或标题'); return; }
+    setAiExpanding(true);
+    try {
+      const res = await axios.post(`${API_BASE_URL}/api/v1/agent/content-expand`, { content, title, mode: aiMode }, getToken());
+      if (res.data.code === 0) {
+        contentForm.setFieldsValue({ content: res.data.data.expanded });
+        message.success('AI 处理完成');
+      } else {
+        message.error(res.data.message || 'AI 处理失败');
+      }
+    } catch { message.error('AI 请求失败'); }
+    setAiExpanding(false);
+  };
 
   const handleEmployeeSubmit = async () => {
     try {
@@ -538,9 +558,18 @@ const MarketingCenter: React.FC = () => {
           <Form.Item name="summary" label="摘要">
             <Input.TextArea placeholder="简要描述内容" rows={2} />
           </Form.Item>
-          <Form.Item name="content" label="正文内容">
+          <Form.Item name="content" label={<span>正文内容 <Button size="small" icon={<RobotOutlined />} loading={aiExpanding} onClick={handleAiExpand} style={{ marginLeft: 8, color: '#722ed1', borderColor: '#722ed1' }}>AI 处理</Button></span>}>
             <Input.TextArea placeholder="请输入详细内容" rows={4} />
           </Form.Item>
+          <div style={{ marginBottom: 16, display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Select value={aiMode} onChange={setAiMode} size="small" style={{ width: 120 }}>
+              <Option value="expand">扩写</Option>
+              <Option value="rewrite">改写优化</Option>
+              <Option value="summary">提炼摘要</Option>
+              <Option value="seo">SEO优化</Option>
+            </Select>
+            <span style={{ fontSize: 12, color: '#999' }}>选择 AI 处理模式，然后点击“AI 处理”按钮</span>
+          </div>
           <Form.Item name="coverImage" label="封面图片URL">
             <Input placeholder="https://example.com/image.jpg" />
           </Form.Item>

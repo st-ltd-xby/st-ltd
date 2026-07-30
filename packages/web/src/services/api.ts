@@ -205,4 +205,6 @@ export const promotionApi = {
   getStructuredData: (siteId?: string) => api.get('/promotion/seo/structured-data', { params: { siteId } }),
   autoFixSeo: (siteId: string) => api.post('/promotion/seo/auto-fix', { siteId }),
   exportSeoReport: () => api.get('/promotion/seo/report', { responseType: 'blob' }),
+  // AI SEO
+  aiSeoAnalyze: (data: any) => api.post('/agent/seo-analyze', data),
 };
