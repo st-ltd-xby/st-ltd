@@ -23,6 +23,7 @@ import adminAuthRoutes from './modules/admin/admin.auth.routes';
 import uploadRoutes from './modules/upload/upload.routes';
 import agentRoutes from './modules/agent/agent.routes';
 import aiToolsRoutes from './modules/ai-tools/ai-tools.routes';
+import visitorRoutes from './modules/visitor/visitor.routes';
 
 const app: Application = express();
 const PORT = process.env.PORT || 3000;
@@ -58,6 +59,7 @@ app.use('/api/v1', dashboardRoutes);
 app.use('/api/v1/promotion', promotionRoutes);
 app.use('/api/v1/admin', adminRouter);
 app.use('/api/v1', uploadRoutes);
+app.use('/api/v1', visitorRoutes);
 app.use('/api/v1/agent', agentRoutes);
 app.use('/api/v1/ai', aiToolsRoutes);
 

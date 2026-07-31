@@ -9,6 +9,7 @@ import {
   RocketOutlined,
 } from '@ant-design/icons';
 import { useAuthStore } from '../stores/authStore';
+import { useVisitorTrack } from '../hooks/useVisitorTrack';
 
 const { Header, Sider, Content } = Layout;
 
@@ -33,6 +34,9 @@ export default function MainLayout() {
   const location = useLocation();
   const { user, tenant, logout } = useAuthStore();
   const { token: { colorBgContainer } } = theme.useToken();
+
+  // 访客追踪
+  useVisitorTrack(tenant?.id);
 
   // 根据当前路径确定选中的菜单项
   const selectedKey = menuItems.find(item => location.pathname.startsWith(item.key))?.key || '/dashboard';
