@@ -1,221 +1,291 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Col, Row, Statistic, Table, Tag, Space, Typography, Progress } from 'antd';
+import { Card, Col, Row, Statistic, Table, Tag, Typography, Progress, Spin, Empty } from 'antd';
 import { 
   UserOutlined, 
   RiseOutlined, 
-  ShoppingCartOutlined, 
   EyeOutlined,
+  ShoppingCartOutlined,
+  FileTextOutlined,
   ArrowUpOutlined,
-  ArrowDownOutlined
+  ArrowDownOutlined,
+  ReloadOutlined
 } from '@ant-design/icons';
 import { Column } from '@ant-design/charts';
+import { dashboardApi } from '../../services/api';
 
 const { Title } = Typography;
 
 const AdminDashboard: React.FC = () => {
-  const [stats, setStats] = useState({
-    totalUsers: 0,
-    totalCustomers: 0,
-    totalLeads: 0,
-    totalRevenue: 0,
-  });
-
-  const [recentActivities, setRecentActivities] = useState<any[]>([]);
+  const [overview, setOverview] = useState<any>(null);
+  const [funnel, setFunnel] = useState<any[]>([]);
+  const [recentLeads, setRecentLeads] = useState<any[]>([]);
+  const [leadsBySource, setLeadsBySource] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const fetchData = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const [statsRes, funnelRes] = await Promise.all([
+        dashboardApi.getStats(),
+        dashboardApi.getFunnel(),
+      ]);
+      const statsData = statsRes.data || statsRes;
+      const funnelData = funnelRes.data || funnelRes;
+      setOverview(statsData.overview);
+      setRecentLeads(statsData.recentLeads || []);
+      setLeadsBySource(statsData.leadsBySource || []);
+      setFunnel(funnelData.funnel || []);
+    } catch (err: any) {
+      setError(err.message || '数据加载失败');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    // 模拟加载数据
-    setTimeout(() => {
-      setStats({
-        totalUsers: 24,
-        totalCustomers: 156,
-        totalLeads: 89,
-        totalRevenue: 125000,
-      });
-
-      setRecentActivities([
-        { id: 1, action: '新用户注册', user: '张三', time: '2分钟前', type: 'info' },
-        { id: 2, action: '新线索到达', user: '李四', time: '15分钟前', type: 'success' },
-        { id: 3, action: '商机更新', user: '王五', time: '30分钟前', type: 'warning' },
-        { id: 4, action: '订单完成', user: '赵六', time: '1小时前', type: 'success' },
-        { id: 5, action: '系统配置更新', user: '管理员', time: '2小时前', type: 'default' },
-      ]);
-
-      setLoading(false);
-    }, 800);
+    fetchData();
   }, []);
 
-  // 模拟图表数据
-  const columnData = [
-    { type: '一月', sales: 3800 },
-    { type: '二月', sales: 5000 },
-    { type: '三月', sales: 4200 },
-    { type: '四月', sales: 6100 },
-    { type: '五月', sales: 5800 },
-    { type: '六月', sales: 7200 },
-  ];
+  // 销售趋势图 - 用线索来源分布数据替代
+  const sourceChartData = leadsBySource.length > 0
+    ? leadsBySource.map((item: any) => ({ type: item.source || '未知', sales: item.count }))
+    : [];
 
-  const leadFunnelData = [
-    { stage: '访问者', count: 10000, percentage: 100 },
-    { stage: '产生线索', count: 1500, percentage: 15 },
-    { stage: '商机客户', count: 650, percentage: 6.5 },
-    { stage: '报价跟进', count: 320, percentage: 3.2 },
-    { stage: '成交', count: 120, percentage: 1.2 },
-  ];
+  const statusColorMap: Record<string, string> = {
+    new: 'blue',
+    following: 'orange',
+    qualified: 'purple',
+    won: 'green',
+    lost: 'red',
+  };
 
-  const columns = [
+  const statusLabelMap: Record<string, string> = {
+    new: '新线索',
+    following: '跟进中',
+    qualified: '已确认',
+    won: '已成交',
+    lost: '已流失',
+  };
+
+  const leadColumns = [
+    { title: '姓名', dataIndex: 'name', key: 'name' },
+    { title: '公司', dataIndex: 'company', key: 'company', render: (v: string) => v || '-' },
+    { title: '来源', dataIndex: 'source', key: 'source', render: (v: string) => v || '-' },
     {
-      title: '活动',
-      dataIndex: 'action',
-      key: 'action',
-    },
-    {
-      title: '用户',
-      dataIndex: 'user',
-      key: 'user',
+      title: '状态',
+      dataIndex: 'status',
+      key: 'status',
+      render: (v: string) => (
+        <Tag color={statusColorMap[v] || 'default'}>{statusLabelMap[v] || v || '-'}</Tag>
+      ),
     },
     {
       title: '时间',
-      dataIndex: 'time',
-      key: 'time',
-    },
-    {
-      title: '状态',
-      key: 'type',
-      render: (record: any) => (
-        <Tag color={
-          record.type === 'success' ? 'green' :
-          record.type === 'warning' ? 'orange' :
-          record.type === 'error' ? 'red' : 'blue'
-        }>
-          {record.type === 'success' ? '成功' :
-           record.type === 'warning' ? '警告' :
-           record.type === 'error' ? '错误' : '信息'}
-        </Tag>
-      ),
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      render: (v: string) => v ? new Date(v).toLocaleString('zh-CN') : '-',
     },
   ];
 
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
+        <Spin size="large" tip="加载数据中..." />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{ textAlign: 'center', padding: 60 }}>
+        <Empty description={error}>
+          <Card.Actions>
+            <a onClick={fetchData}>重新加载</a>
+          </Card.Actions>
+        </Empty>
+      </div>
+    );
+  }
+
+  const fmt = (n: number) => n?.toLocaleString('zh-CN') || '0';
+  const fmtMoney = (n: number) => '¥' + (n || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 });
+
   return (
     <div>
-      <Title level={2}>管理仪表盘</Title>
-      <Row gutter={16} style={{ marginBottom: 24 }}>
-        <Col span={6}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <Title level={2} style={{ margin: 0 }}>数据看板</Title>
+        <a onClick={fetchData} style={{ cursor: 'pointer' }}><ReloadOutlined /> 刷新</a>
+      </div>
+
+      {/* 第一行：核心指标 */}
+      <Row gutter={16} style={{ marginBottom: 16 }}>
+        <Col xs={24} sm={12} lg={12} xl={12}>
           <Card>
-            <Statistic
-              title="总用户数"
-              value={stats.totalUsers}
-              prefix={<UserOutlined />}
-              valueStyle={{ color: '#3f8600' }}
-            />
+            <Row gutter={16}>
+              <Col span={12}>
+                <Statistic
+                  title="今日访客"
+                  value={overview?.todayVisitors || 0}
+                  prefix={<EyeOutlined />}
+                  valueStyle={{ color: '#1890ff' }}
+                />
+              </Col>
+              <Col span={12}>
+                <Statistic
+                  title="今日新增线索"
+                  value={overview?.todayLeads || 0}
+                  prefix={<RiseOutlined />}
+                  valueStyle={{ color: '#52c41a' }}
+                />
+              </Col>
+            </Row>
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={24} sm={12} lg={12} xl={12}>
           <Card>
-            <Statistic
-              title="总客户数"
-              value={stats.totalCustomers}
-              prefix={<RiseOutlined />}
-              valueStyle={{ color: '#1890ff' }}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card>
-            <Statistic
-              title="总线索数"
-              value={stats.totalLeads}
-              prefix={<EyeOutlined />}
-              valueStyle={{ color: '#722ed1' }}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card>
-            <Statistic
-              title="总收入"
-              value={stats.totalRevenue}
-              precision={2}
-              prefix="¥"
-              valueStyle={{ color: '#cf1322' }}
-              suffix="/元"
-            />
-            <div style={{ display: 'flex', alignItems: 'center', marginTop: 8 }}>
-              <ArrowUpOutlined style={{ color: '#cf1322' }} />
-              <span style={{ marginLeft: 4, color: '#cf1322' }}>12.5%</span>
-              <span style={{ marginLeft: 8, color: '#8c8c8c' }}>较上月</span>
-            </div>
+            <Row gutter={16}>
+              <Col span={12}>
+                <Statistic
+                  title="本月商机金额"
+                  value={overview?.monthOpportunityAmount || 0}
+                  precision={2}
+                  prefix="¥"
+                  valueStyle={{ color: '#722ed1' }}
+                />
+              </Col>
+              <Col span={12}>
+                <Statistic
+                  title="本月成交订单"
+                  value={overview?.monthWonOrders || 0}
+                  prefix={<ShoppingCartOutlined />}
+                  valueStyle={{ color: '#cf1322' }}
+                />
+              </Col>
+            </Row>
           </Card>
         </Col>
       </Row>
 
-      <Row gutter={16} style={{ marginBottom: 24 }}>
-        <Col span={16}>
-          <Card title="销售趋势图" loading={loading}>
-            <Column 
-              data={columnData} 
-              xField="type"
-              yField="sales"
-              height={300}
-              color="#52c41a"
-            />
+      {/* 第二行：累计指标 */}
+      <Row gutter={16} style={{ marginBottom: 16 }}>
+        <Col xs={24} sm={12} lg={12} xl={12}>
+          <Card>
+            <Row gutter={16}>
+              <Col span={8}>
+                <Statistic
+                  title="总客户数"
+                  value={overview?.totalCustomers || 0}
+                  prefix={<UserOutlined />}
+                  valueStyle={{ color: '#13c2c2' }}
+                />
+              </Col>
+              <Col span={8}>
+                <Statistic
+                  title="总线索数"
+                  value={overview?.totalLeads || 0}
+                  prefix={<FileTextOutlined />}
+                  valueStyle={{ color: '#fa8c16' }}
+                />
+              </Col>
+              <Col span={8}>
+                <Statistic
+                  title="在售商品"
+                  value={overview?.activeProducts || 0}
+                  prefix={<ShoppingCartOutlined />}
+                  valueStyle={{ color: '#eb2f96' }}
+                />
+              </Col>
+            </Row>
           </Card>
         </Col>
-        <Col span={8}>
-          <Card title="获客漏斗" loading={loading}>
-            {leadFunnelData.map((item, index) => (
-              <div key={index} style={{ marginBottom: 16 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <span>{item.stage}</span>
-                  <span>{item.count} ({item.percentage}%)</span>
-                </div>
-                <Progress percent={item.percentage} showInfo={false} strokeColor={{
-                  '0%': '#108ee9',
-                  '100%': '#87d068',
-                }} />
-              </div>
-            ))}
+        <Col xs={24} sm={12} lg={12} xl={12}>
+          <Card>
+            <Row gutter={16}>
+              <Col span={8}>
+                <Statistic
+                  title="文章总数"
+                  value={overview?.totalArticles || 0}
+                  prefix={<FileTextOutlined />}
+                  valueStyle={{ color: '#2f54eb' }}
+                />
+              </Col>
+              <Col span={8}>
+                <Statistic
+                  title="文章总阅读"
+                  value={overview?.totalArticleViews || 0}
+                  prefix={<EyeOutlined />}
+                  valueStyle={{ color: '#52c41a' }}
+                />
+              </Col>
+              <Col span={8}>
+                <Statistic
+                  title="文章引流线索"
+                  value={overview?.totalArticleLeads || 0}
+                  prefix={<RiseOutlined />}
+                  valueStyle={{ color: '#faad14' }}
+                />
+              </Col>
+            </Row>
           </Card>
         </Col>
       </Row>
 
+      {/* 第三行：图表 */}
+      <Row gutter={16} style={{ marginBottom: 16 }}>
+        <Col span={14}>
+          <Card title="线索来源分布">
+            {sourceChartData.length > 0 ? (
+              <Column 
+                data={sourceChartData} 
+                xField="type"
+                yField="sales"
+                height={280}
+                color="#1890ff"
+              />
+            ) : (
+              <Empty description="暂无线索来源数据" style={{ padding: 60 }} />
+            )}
+          </Card>
+        </Col>
+        <Col span={10}>
+          <Card title="获客漏斗">
+            {funnel.length > 0 ? (
+              funnel.map((item: any, index: number) => {
+                const pct = funnel[0]?.count > 0 ? Math.round((item.count / funnel[0].count) * 100) : 0;
+                return (
+                  <div key={index} style={{ marginBottom: 16 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <span>{item.stage}</span>
+                      <span>{fmt(item.count)} ({pct}%)</span>
+                    </div>
+                    <Progress percent={pct} showInfo={false} strokeColor={{
+                      '0%': '#108ee9',
+                      '100%': '#87d068',
+                    }} />
+                  </div>
+                );
+              })
+            ) : (
+              <Empty description="暂无漏斗数据" style={{ padding: 40 }} />
+            )}
+          </Card>
+        </Col>
+      </Row>
+
+      {/* 第四行：最新线索 */}
       <Row gutter={16}>
-        <Col span={16}>
-          <Card title="最近活动" loading={loading}>
+        <Col span={24}>
+          <Card title="最新线索">
             <Table 
-              dataSource={recentActivities} 
-              columns={columns} 
+              dataSource={recentLeads} 
+              columns={leadColumns} 
               rowKey="id" 
-              pagination={{ pageSize: 5 }}
+              pagination={{ pageSize: 5, showSizeChanger: false }}
+              locale={{ emptyText: '暂无线索数据' }}
+              size="middle"
             />
-          </Card>
-        </Col>
-        <Col span={8}>
-          <Card title="系统状态">
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>服务器状态</span>
-                <Tag color="green">运行中</Tag>
-              </div>
-            </div>
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>数据库连接</span>
-                <Tag color="green">正常</Tag>
-              </div>
-            </div>
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>API服务</span>
-                <Tag color="green">可用</Tag>
-              </div>
-            </div>
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>系统负载</span>
-                <Tag color="orange">中等</Tag>
-              </div>
-            </div>
           </Card>
         </Col>
       </Row>

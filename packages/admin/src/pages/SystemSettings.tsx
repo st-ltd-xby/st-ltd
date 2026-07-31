@@ -65,6 +65,7 @@ const SystemSettings: React.FC = () => {
   const [apiForm] = Form.useForm();
   const [integrationForm] = Form.useForm();
   const [backupForm] = Form.useForm();
+  const [notifForm] = Form.useForm();
   
   const handleGeneralSubmit = async (values: any) => {
     try {
@@ -170,6 +171,27 @@ const SystemSettings: React.FC = () => {
       message.error(error.response?.data?.message || '保存失败');
     }
   };
+  
+  const handleNotifSubmit = async (values: any) => {
+    try {
+      const token = localStorage.getItem('adminToken');
+      const response = await axios.post(`${API_BASE_URL}/api/v1/admin/settings/notification`, values, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.data.code === 0 || response.data.code === 200) {
+        message.success('通知设置保存成功');
+      } else {
+        message.error(response.data.message || '保存失败');
+      }
+    } catch (error: any) {
+      console.error('Error saving notification settings:', error);
+      message.error(error.response?.data?.message || '保存失败');
+    }
+  };
 
   const renderContent = () => {
     switch (activeTab) {
@@ -179,12 +201,14 @@ const SystemSettings: React.FC = () => {
               layout="vertical"
               onFinish={handleGeneralSubmit}
               initialValues={{
-                siteName: 'LTD营销枢纽系统',
-                siteDescription: '领先的营销自动化平台',
-                siteDomain: 'https://ltd.example.com',
+                siteName: 'ST-LTD 运营系统',
+                siteDescription: '企业数字化营销管理平台',
+                siteDomain: 'https://st-ltd-web.pages.dev',
                 contactEmail: 'admin@ltd.com',
                 contactPhone: '400-123-4567',
                 timezone: 'Asia/Shanghai',
+                language: 'zh-CN',
+                icpNumber: '',
                 currency: 'CNY',
                 status: true,
                 logoUrl: '',
@@ -222,11 +246,28 @@ const SystemSettings: React.FC = () => {
                     label="时区"
                   >
                     <Select placeholder="请选择时区">
-                      <Option value="Asia/Shanghai">亚洲/上海 (UTC+8)</Option>
+                      <Option value="Asia/Shanghai">Asia/Shanghai (UTC+8)</Option>
                       <Option value="Asia/Tokyo">亚洲/东京 (UTC+9)</Option>
                       <Option value="America/New_York">美洲/纽约 (UTC-5)</Option>
                       <Option value="Europe/London">欧洲/伦敦 (UTC+0)</Option>
                     </Select>
+                  </Form.Item>
+                  
+                  <Form.Item
+                    name="language"
+                    label="默认语言"
+                  >
+                    <Select placeholder="请选择默认语言">
+                      <Option value="zh-CN">简体中文</Option>
+                      <Option value="en-US">English</Option>
+                    </Select>
+                  </Form.Item>
+                  
+                  <Form.Item
+                    name="icpNumber"
+                    label="ICP 备案号"
+                  >
+                    <Input placeholder="如：京ICP备XXXXXXXX号" />
                   </Form.Item>
                   
                   <Form.Item
@@ -239,6 +280,19 @@ const SystemSettings: React.FC = () => {
                       <Option value="EUR">欧元 (EUR)</Option>
                       <Option value="JPY">日元 (JPY)</Option>
                     </Select>
+                  </Form.Item>
+                </Panel>
+                
+                <Panel header="站点 Logo" key="logo-info">
+                  <Form.Item name="logoUrl" label="站点 Logo">
+                    <Upload maxCount={1} beforeUpload={() => false}>
+                      <Button icon={<UploadOutlined />}>上传 Logo</Button>
+                    </Upload>
+                  </Form.Item>
+                  <Form.Item name="faviconUrl" label="Favicon 图标">
+                    <Upload maxCount={1} beforeUpload={() => false}>
+                      <Button icon={<UploadOutlined />}>上传 Favicon</Button>
+                    </Upload>
                   </Form.Item>
                 </Panel>
                 
@@ -303,6 +357,56 @@ const SystemSettings: React.FC = () => {
                 </Button>
               </Form.Item>
               </Form>
+      );
+      case 'notification': return (
+            <Form
+              form={notifForm}
+              layout="vertical"
+              onFinish={handleNotifSubmit}
+              initialValues={{
+                emailNotify: true,
+                smsNotify: false,
+                wechatNotify: true,
+                newLeadNotify: true,
+                newOrderNotify: true,
+                newCustomerNotify: true,
+                systemAlertNotify: true,
+              }}
+            >
+              <Collapse defaultActiveKey={['notif-channels', 'notif-events']}>
+                <Panel header="通知渠道" key="notif-channels">
+                  <Form.Item name="emailNotify" label="邮件通知" valuePropName="checked">
+                    <Switch checkedChildren="开启" unCheckedChildren="关闭" />
+                  </Form.Item>
+                  <Form.Item name="smsNotify" label="短信通知" valuePropName="checked">
+                    <Switch checkedChildren="开启" unCheckedChildren="关闭" />
+                  </Form.Item>
+                  <Form.Item name="wechatNotify" label="微信通知" valuePropName="checked">
+                    <Switch checkedChildren="开启" unCheckedChildren="关闭" />
+                  </Form.Item>
+                </Panel>
+                <Panel header="通知事件" key="notif-events">
+                  <Form.Item name="newLeadNotify" label="新线索通知" valuePropName="checked">
+                    <Switch checkedChildren="开启" unCheckedChildren="关闭" />
+                  </Form.Item>
+                  <Form.Item name="newCustomerNotify" label="新客户通知" valuePropName="checked">
+                    <Switch checkedChildren="开启" unCheckedChildren="关闭" />
+                  </Form.Item>
+                  <Form.Item name="newOrderNotify" label="新订单通知" valuePropName="checked">
+                    <Switch checkedChildren="开启" unCheckedChildren="关闭" />
+                  </Form.Item>
+                  <Form.Item name="systemAlertNotify" label="系统预警通知" valuePropName="checked">
+                    <Switch checkedChildren="开启" unCheckedChildren="关闭" />
+                  </Form.Item>
+                </Panel>
+              </Collapse>
+              <Divider />
+              <Form.Item>
+                <Button type="primary" htmlType="submit" icon={<SaveOutlined />}> 
+                  保存通知设置
+                </Button>
+              </Form.Item>
+            </Form>
       );
       case 'security': return (
             <Form

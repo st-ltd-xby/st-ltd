@@ -1,21 +1,27 @@
 import { useState } from 'react';
-import { Card, Form, Input, Button, Switch, Select, Tabs, Typography, Row, Col, Divider, message, Upload, Space, Tag, Statistic } from 'antd';
-import { SaveOutlined, UploadOutlined, GlobalOutlined, BellOutlined, SafetyOutlined, DatabaseOutlined } from '@ant-design/icons';
+import { Card, Form, Input, Button, Switch, Tabs, Typography, Row, Col, Divider, message, Tag, Statistic, Progress } from 'antd';
+import { SaveOutlined, BellOutlined, DatabaseOutlined, LinkOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
 const { Title, Text } = Typography;
 
 export default function Settings() {
-  const [siteForm] = Form.useForm();
   const [notifForm] = Form.useForm();
-
-  const handleSaveSite = (values: any) => {
-    console.log('Site settings:', values);
-    message.success('站点设置已保存');
-  };
 
   const handleSaveNotif = (values: any) => {
     console.log('Notification settings:', values);
     message.success('通知设置已保存');
   };
+
+  // 模拟平台接入状态（实际应从后端 API 获取）
+  const platforms = [
+    { name: '微信公众号', connected: true, desc: '已绑定，消息推送正常', color: '#07c160' },
+    { name: '微信小程序', connected: true, desc: '已接入，版本 v2.3.1', color: '#07c160' },
+    { name: '企业微信', connected: false, desc: '未接入', color: '#999' },
+    { name: '抖音开放平台', connected: false, desc: '未接入', color: '#999' },
+    { name: '百度统计', connected: true, desc: '数据同步中', color: '#07c160' },
+    { name: 'Google Analytics', connected: false, desc: '未接入', color: '#999' },
+    { name: '支付宝', connected: false, desc: '未接入', color: '#999' },
+    { name: '微信支付', connected: false, desc: '未接入', color: '#999' },
+  ];
 
   return (
     <div>
@@ -23,59 +29,12 @@ export default function Settings() {
 
       <Tabs items={[
         {
-          key: 'site',
-          label: <span><GlobalOutlined /> 站点信息</span>,
-          children: (
-            <Card>
-              <Form form={siteForm} onFinish={handleSaveSite} layout="vertical" style={{ maxWidth: 600 }}
-                initialValues={{ siteName: 'ST-LTD 运营系统', siteDesc: '企业数字化营销管理平台', language: 'zh-CN', timezone: 'Asia/Shanghai' }}
-              >
-                <Form.Item name="siteName" label="站点名称" rules={[{ required: true }]}>
-                  <Input placeholder="请输入站点名称" />
-                </Form.Item>
-                <Form.Item name="siteDesc" label="站点描述">
-                  <Input.TextArea rows={2} placeholder="站点描述信息" />
-                </Form.Item>
-                <Form.Item name="logo" label="站点 Logo">
-                  <Upload maxCount={1} beforeUpload={() => false}>
-                    <Button icon={<UploadOutlined />}>上传 Logo</Button>
-                  </Upload>
-                </Form.Item>
-                <Row gutter={16}>
-                  <Col span={12}>
-                    <Form.Item name="language" label="默认语言">
-                      <Select>
-                        <Select.Option value="zh-CN">简体中文</Select.Option>
-                        <Select.Option value="en-US">English</Select.Option>
-                      </Select>
-                    </Form.Item>
-                  </Col>
-                  <Col span={12}>
-                    <Form.Item name="timezone" label="时区">
-                      <Select>
-                        <Select.Option value="Asia/Shanghai">Asia/Shanghai (UTC+8)</Select.Option>
-                        <Select.Option value="UTC">UTC</Select.Option>
-                      </Select>
-                    </Form.Item>
-                  </Col>
-                </Row>
-                <Form.Item name="icp" label="ICP 备案号">
-                  <Input placeholder="如：京ICP备XXXXXXXX号" />
-                </Form.Item>
-                <Form.Item>
-                  <Button type="primary" htmlType="submit" icon={<SaveOutlined />}>保存设置</Button>
-                </Form.Item>
-              </Form>
-            </Card>
-          ),
-        },
-        {
           key: 'notification',
           label: <span><BellOutlined /> 通知设置</span>,
           children: (
             <Card>
               <Form form={notifForm} onFinish={handleSaveNotif} layout="vertical" style={{ maxWidth: 600 }}
-                initialValues={{ emailNotify: true, smsNotify: false, wechatNotify: true, newLeadNotify: true, newOrderNotify: true }}>
+                initialValues={{ emailNotify: true, smsNotify: false, wechatNotify: true, newLeadNotify: true, newOrderNotify: true, newCustomerNotify: true, systemAlertNotify: true }}>
                 <Divider orientation="left">通知渠道</Divider>
                 <Form.Item name="emailNotify" label="邮件通知" valuePropName="checked">
                   <Switch checkedChildren="开启" unCheckedChildren="关闭" />
@@ -90,7 +49,13 @@ export default function Settings() {
                 <Form.Item name="newLeadNotify" label="新线索通知" valuePropName="checked">
                   <Switch checkedChildren="开启" unCheckedChildren="关闭" />
                 </Form.Item>
+                <Form.Item name="newCustomerNotify" label="新客户通知" valuePropName="checked">
+                  <Switch checkedChildren="开启" unCheckedChildren="关闭" />
+                </Form.Item>
                 <Form.Item name="newOrderNotify" label="新订单通知" valuePropName="checked">
+                  <Switch checkedChildren="开启" unCheckedChildren="关闭" />
+                </Form.Item>
+                <Form.Item name="systemAlertNotify" label="系统预警通知" valuePropName="checked">
                   <Switch checkedChildren="开启" unCheckedChildren="关闭" />
                 </Form.Item>
                 <Form.Item>
@@ -101,58 +66,39 @@ export default function Settings() {
           ),
         },
         {
-          key: 'security',
-          label: <span><SafetyOutlined /> 安全设置</span>,
+          key: 'platforms',
+          label: <span><LinkOutlined /> 系统接入的平台</span>,
           children: (
             <Card>
-              <Row gutter={[24, 16]}>
-                <Col span={24}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid #f0f0f0' }}>
-                    <div>
-                      <Text strong>登录密码强度要求</Text>
-                      <div><Text type="secondary">要求密码包含大小写字母、数字和特殊字符</Text></div>
-                    </div>
-                    <Switch defaultChecked checkedChildren="开启" unCheckedChildren="关闭" />
-                  </div>
-                </Col>
-                <Col span={24}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid #f0f0f0' }}>
-                    <div>
-                      <Text strong>两步验证 (2FA)</Text>
-                      <div><Text type="secondary">登录时需要额外验证</Text></div>
-                    </div>
-                    <Switch checkedChildren="开启" unCheckedChildren="关闭" />
-                  </div>
-                </Col>
-                <Col span={24}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid #f0f0f0' }}>
-                    <div>
-                      <Text strong>登录失败锁定</Text>
-                      <div><Text type="secondary">连续 5 次登录失败后锁定账号 30 分钟</Text></div>
-                    </div>
-                    <Switch defaultChecked checkedChildren="开启" unCheckedChildren="关闭" />
-                  </div>
-                </Col>
-                <Col span={24}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0' }}>
-                    <div>
-                      <Text strong>会话超时时间</Text>
-                      <div><Text type="secondary">无操作自动退出登录</Text></div>
-                    </div>
-                    <Select defaultValue="30" style={{ width: 120 }}>
-                      <Select.Option value="15">15 分钟</Select.Option>
-                      <Select.Option value="30">30 分钟</Select.Option>
-                      <Select.Option value="60">1 小时</Select.Option>
-                      <Select.Option value="120">2 小时</Select.Option>
-                    </Select>
-                  </div>
-                </Col>
+              <Row gutter={[16, 16]}>
+                {platforms.map((p, i) => (
+                  <Col xs={24} sm={12} md={8} key={i}>
+                    <Card size="small" style={{ borderRadius: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{ width: 40, height: 40, borderRadius: 8, background: p.color + '20', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <LinkOutlined style={{ color: p.color, fontSize: 18 }} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Text strong>{p.name}</Text>
+                            {p.connected ? (
+                              <Tag color="success" icon={<CheckCircleOutlined />}>已接入</Tag>
+                            ) : (
+                              <Tag color="default" icon={<CloseCircleOutlined />}>未接入</Tag>
+                            )}
+                          </div>
+                          <Text type="secondary" style={{ fontSize: 12 }}>{p.desc}</Text>
+                        </div>
+                      </div>
+                    </Card>
+                  </Col>
+                ))}
               </Row>
             </Card>
           ),
         },
         {
-          key: 'team',
+          key: 'data',
           label: <span><DatabaseOutlined /> 数据与备份</span>,
           children: (
             <Card>
@@ -161,14 +107,14 @@ export default function Settings() {
                   <Card>
                     <Statistic title="数据存储" value={2.4} suffix="GB" />
                     <div style={{ marginTop: 8 }}>
-                      <Tag color="blue">已用 2.4 GB</Tag>
-                      <Tag>总计 50 GB</Tag>
+                      <Progress percent={4.8} status="active" />
+                      <div style={{ marginTop: 4 }}><Tag color="blue">已用 2.4 GB</Tag><Tag>总计 50 GB</Tag></div>
                     </div>
                   </Card>
                 </Col>
                 <Col span={8}>
                   <Card>
-                    <Statistic title="最后备份" value="2024-01-15" />
+                    <Statistic title="最后备份" value="2026-07-30" />
                     <Button type="link" style={{ padding: 0, marginTop: 8 }}>立即备份</Button>
                   </Card>
                 </Col>

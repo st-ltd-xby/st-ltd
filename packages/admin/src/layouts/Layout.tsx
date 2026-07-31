@@ -66,6 +66,7 @@ const menuItems = [
     key: 'system-settings', icon: <SettingOutlined />, label: '系统设置',
     children: [
       { key: '/admin/settings?tab=basic', icon: <SettingOutlined />, label: '基础设置' },
+      { key: '/admin/settings?tab=notification', icon: <BellOutlined />, label: '通知设置' },
       { key: '/admin/settings?tab=security', icon: <SafetyCertificateOutlined />, label: '安全设置' },
       { key: '/admin/settings?tab=api', icon: <ApiOutlined />, label: 'API设置' },
       { key: '/admin/settings?tab=apidocs', icon: <BookOutlined />, label: 'API文档' },

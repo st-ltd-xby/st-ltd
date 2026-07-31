@@ -7,7 +7,6 @@ import {
   RiseOutlined, 
   ShopOutlined, 
   LinkOutlined, 
-  SettingOutlined,
   FileTextOutlined,
   MailOutlined,
   QrcodeOutlined,
@@ -63,13 +62,6 @@ const AdminWelcome: React.FC = () => {
       path: '/admin/tracking-links',
       color: '#e6fffb'
     },
-    {
-      title: '系统设置',
-      icon: <SettingOutlined style={{ fontSize: 24, color: '#8c8c8c' }} />,
-      description: 'API与大模型接口管理',
-      path: '/admin/system',
-      color: '#f0f0f0'
-    }
   ];
 
   return (
