@@ -3,7 +3,7 @@ import prisma from '../../common/prisma';
 import { success, fail } from '../../common/response';
 import { authMiddleware } from '../../middleware/auth';
 
-const router = Router();
+const router: Router = Router();
 router.use(authMiddleware);
 
 // 获取数据看板统计
@@ -16,18 +16,28 @@ router.get('/dashboard', async (req: Request, res: Response) => {
 
     const [
       todayVisitors,
+      todayPageViews,
       todayLeads,
       monthOpportunities,
       monthWonOrders,
       totalCustomers,
       totalLeads,
+      totalPageViews,
       leadsBySource,
       recentLeads,
       articles,
       products,
     ] = await Promise.all([
-      // 今日访客
+      // 今日独立访客数
       prisma.visitor.count({ where: { tenantId, lastVisitAt: { gte: today } } }),
+      // 今日页面访问次数（每次打开/刷新+1）
+      prisma.visitorBehavior.count({
+        where: {
+          visitor: { tenantId },
+          type: 'pageview',
+          createdAt: { gte: today },
+        },
+      }),
       // 今日新增线索
       prisma.lead.count({ where: { tenantId, createdAt: { gte: today } } }),
       // 本月商机总额
@@ -41,6 +51,13 @@ router.get('/dashboard', async (req: Request, res: Response) => {
       prisma.customer.count({ where: { tenantId } }),
       // 总线索数
       prisma.lead.count({ where: { tenantId } }),
+      // 总页面访问次数
+      prisma.visitorBehavior.count({
+        where: {
+          visitor: { tenantId },
+          type: 'pageview',
+        },
+      }),
       // 线索来源分布
       prisma.lead.groupBy({
         by: ['source'],
@@ -67,11 +84,13 @@ router.get('/dashboard', async (req: Request, res: Response) => {
     success(res, {
       overview: {
         todayVisitors,
+        todayPageViews,
         todayLeads,
         monthOpportunityAmount: monthOpportunities._sum.amount || 0,
         monthWonOrders,
         totalCustomers,
         totalLeads,
+        totalPageViews,
         totalArticles: articles._count,
         totalArticleViews: articles._sum.viewCount || 0,
         totalArticleLeads: articles._sum.leadCount || 0,
@@ -92,8 +111,11 @@ router.get('/dashboard', async (req: Request, res: Response) => {
 router.get('/dashboard/funnel', async (req: Request, res: Response) => {
   try {
     const tenantId = req.user!.tenantId;
-    const [visitors, leads, opportunities, following, won] = await Promise.all([
+    const [visitors, totalVisits, leads, opportunities, following, won] = await Promise.all([
       prisma.visitor.count({ where: { tenantId } }),
+      prisma.visitorBehavior.count({
+        where: { visitor: { tenantId }, type: 'pageview' },
+      }),
       prisma.lead.count({ where: { tenantId } }),
       prisma.opportunity.count({ where: { tenantId } }),
       prisma.lead.count({ where: { tenantId, status: { in: ['following', 'qualified'] } } }),
@@ -103,6 +125,7 @@ router.get('/dashboard/funnel', async (req: Request, res: Response) => {
     success(res, {
       funnel: [
         { stage: '全站访客', count: visitors },
+        { stage: '总访问量', count: totalVisits },
         { stage: '产生线索', count: leads },
         { stage: '商机客户', count: opportunities },
         { stage: '报价跟进', count: following },

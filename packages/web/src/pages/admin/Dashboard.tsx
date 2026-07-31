@@ -126,8 +126,8 @@ const AdminDashboard: React.FC = () => {
             <Row gutter={16}>
               <Col span={12}>
                 <Statistic
-                  title="今日访客"
-                  value={overview?.todayVisitors || 0}
+                  title="今日访问"
+                  value={overview?.todayPageViews || 0}
                   prefix={<EyeOutlined />}
                   valueStyle={{ color: '#1890ff' }}
                 />
@@ -191,10 +191,10 @@ const AdminDashboard: React.FC = () => {
               </Col>
               <Col span={8}>
                 <Statistic
-                  title="在售商品"
-                  value={overview?.activeProducts || 0}
-                  prefix={<ShoppingCartOutlined />}
-                  valueStyle={{ color: '#eb2f96' }}
+                  title="总访问量"
+                  value={overview?.totalPageViews || 0}
+                  prefix={<EyeOutlined />}
+                  valueStyle={{ color: '#722ed1' }}
                 />
               </Col>
             </Row>
