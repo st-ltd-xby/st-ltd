@@ -50,8 +50,10 @@ export const cmsApi = {
   getSite: (id: string) => api.get(`/cms/sites/${id}`),
   updateSite: (id: string, data: any) => api.put(`/cms/sites/${id}`, data),
   deleteSite: (id: string) => api.delete(`/cms/sites/${id}`),
-  getPages: (siteId: string) => api.get(`/cms/sites/${siteId}/pages`),
-  createPage: (siteId: string, data: any) => api.post(`/cms/sites/${siteId}/pages`, data),
+  // 独立页面 API（不依赖站点）
+  getPages: (siteId?: string) => siteId ? api.get(`/cms/sites/${siteId}/pages`) : api.get('/cms/pages'),
+  createPage: (data: any) => api.post('/cms/pages', data),
+  createPageInSite: (siteId: string, data: any) => api.post(`/cms/sites/${siteId}/pages`, data),
   updatePage: (id: string, data: any) => api.put(`/cms/pages/${id}`, data),
   deletePage: (id: string) => api.delete(`/cms/pages/${id}`),
   getForms: (siteId: string) => api.get(`/cms/sites/${siteId}/forms`),

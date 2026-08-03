@@ -31,13 +31,21 @@ const componentLibrary = [
   { type: 'form', label: '表单', icon: <EditOutlined />, defaultProps: { title: '联系我们', fields: '姓名,手机,留言', submitText: '提交' } },
 ];
 
+// 解析图片 URL（相对路径拼接后端地址）
+const resolveImageUrl = (url: string) => {
+  if (!url) return '';
+  if (url.startsWith('http')) return url;
+  return `${API_BASE_URL}${url}`;
+};
+
 // 图片渲染组件（带加载失败回退）
 function ImageRender({ props, wrapperStyle, onClick }: { props: any; wrapperStyle: React.CSSProperties; onClick: () => void }) {
   const [imgError, setImgError] = useState(false);
+  const resolvedUrl = resolveImageUrl(props.url);
   return (
     <div style={wrapperStyle} onClick={onClick}>
-      {props.url && !imgError ? (
-        <img src={props.url} alt={props.alt} style={{ width: props.width, height: props.height, borderRadius: props.borderRadius, display: 'block' }} onError={() => setImgError(true)} />
+      {resolvedUrl && !imgError ? (
+        <img src={resolvedUrl} alt={props.alt} style={{ width: props.width, height: props.height, borderRadius: props.borderRadius, display: 'block' }} onError={() => setImgError(true)} />
       ) : (
         <div style={{ width: props.width || '100%', height: 200, background: '#f5f5f5', borderRadius: props.borderRadius || 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999' }}>
           <PictureOutlined style={{ fontSize: 32, marginRight: 8 }} /> {props.url ? '图片加载失败' : '点击设置图片URL'}
@@ -180,7 +188,7 @@ function PropertyPanel({ comp, onChange }: { comp: PageComponent | null; onChang
                 style={{ flex: 1 }}
               />
               <Upload
-                action="/api/v1/upload"
+                action={`${API_BASE_URL}/api/v1/upload`}
                 headers={{ Authorization: `Bearer ${localStorage.getItem('token')}` }}
                 showUploadList={false}
                 accept="image/*"
@@ -204,7 +212,10 @@ function PropertyPanel({ comp, onChange }: { comp: PageComponent | null; onChang
                   if (info.file.status === 'done') {
                     message.destroy();
                     if (info.file.response?.code === 0) {
-                      handleChange('url', info.file.response.data.url);
+                      // 拼接完整后端地址
+                      const rawUrl = info.file.response.data.url;
+                      const fullUrl = rawUrl.startsWith('http') ? rawUrl : `${API_BASE_URL}${rawUrl}`;
+                      handleChange('url', fullUrl);
                       message.success('图片上传成功');
                     } else {
                       message.error(info.file.response?.message || '上传失败');
@@ -276,8 +287,6 @@ function PropertyPanel({ comp, onChange }: { comp: PageComponent | null; onChang
 }
 
 export default function PageBuilder() {
-  const [sites, setSites] = useState<any[]>([]);
-  const [selectedSiteId, setSelectedSiteId] = useState<string>('');
   const [pages, setPages] = useState<any[]>([]);
   const [currentPageId, setCurrentPageId] = useState<string | null>(null);
   const [components, setComponents] = useState<PageComponent[]>([]);
@@ -294,38 +303,19 @@ export default function PageBuilder() {
 
   const selectedComp = components.find(c => c.id === selectedId) || null;
 
-  // 加载站点列表
+  // 加载页面列表（独立，不依赖站点）
   useEffect(() => {
-    loadSites();
+    loadPages();
   }, []);
 
-  const loadSites = async () => {
+  const loadPages = useCallback(async () => {
     try {
-      const res: any = await cmsApi.getSites({ pageSize: '100' });
-      if (res.code === 0) {
-        const list = Array.isArray(res.data) ? res.data : (res.data?.list || []);
-        setSites(list);
-        if (list.length > 0 && !selectedSiteId) {
-          setSelectedSiteId(list[0].id);
-        }
-      }
-    } catch { /* ignore */ }
-  };
-
-  // 加载页面列表
-  const loadPages = useCallback(async (siteId: string) => {
-    if (!siteId) return;
-    try {
-      const res: any = await cmsApi.getPages(siteId);
+      const res: any = await cmsApi.getPages();
       if (res.code === 0 && res.data) {
         setPages(res.data);
       }
     } catch { /* ignore */ }
   }, []);
-
-  useEffect(() => {
-    if (selectedSiteId) loadPages(selectedSiteId);
-  }, [selectedSiteId, loadPages]);
 
   // 加载页面内容
   const loadPageContent = async (page: any) => {
@@ -364,7 +354,7 @@ export default function PageBuilder() {
           setComponents([]);
           setCurrentPageId(null);
         }
-        loadPages(selectedSiteId);
+        loadPages();
       }
     } catch {
       message.error('删除失败');
@@ -420,10 +410,6 @@ export default function PageBuilder() {
 
   // 保存页面（新建或更新）
   const handleSave = async (values: any) => {
-    if (!selectedSiteId) {
-      message.error('请先选择站点');
-      return;
-    }
     setLoading(true);
     try {
       const pageData = {
@@ -438,7 +424,7 @@ export default function PageBuilder() {
       if (currentPageId) {
         res = await cmsApi.updatePage(currentPageId, pageData);
       } else {
-        res = await cmsApi.createPage(selectedSiteId, pageData);
+        res = await cmsApi.createPage(pageData);
       }
       console.log('保存结果:', res);
       if (res.code === 0) {
@@ -449,7 +435,7 @@ export default function PageBuilder() {
         const url = `/p/${slug}`;
         setPageUrl(url);
         setSaveModal(false);
-        loadPages(selectedSiteId);
+        loadPages();
         // 自动生成推广链接（静默）
         if (savedPageId) {
           await generatePromotionLink(savedPageId);
@@ -533,10 +519,7 @@ export default function PageBuilder() {
     >
       <div style={{ marginBottom: 16 }}>
         <Space>
-          <Select value={selectedSiteId} onChange={v => { setSelectedSiteId(v); setCurrentPageId(null); setComponents([]); }} style={{ width: 200 }}>
-            {sites.map(s => <Select.Option key={s.id} value={s.id}>{s.name}</Select.Option>)}
-          </Select>
-          <Button icon={<ReloadOutlined />} onClick={() => loadPages(selectedSiteId)}>刷新</Button>
+          <Button icon={<ReloadOutlined />} onClick={() => loadPages()}>刷新</Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={() => { setPageListVisible(false); newPage(); }}>新建页面</Button>
         </Space>
       </div>
@@ -588,9 +571,6 @@ export default function PageBuilder() {
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
         <Space>
           <Title level={4} style={{ margin: 0 }}>页面搭建</Title>
-          {selectedSiteId && sites.find(s => s.id === selectedSiteId) && (
-            <Tag color="blue">{sites.find(s => s.id === selectedSiteId)?.name}</Tag>
-          )}
           {currentPageId && <Tag color="green">编辑中: {pages.find(p => p.id === currentPageId)?.title}</Tag>}
         </Space>
         <Space>

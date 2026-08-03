@@ -109,7 +109,8 @@ model Site {
 
 model Page {
   id          String    @id @default(cuid())
-  siteId      String
+  tenantId    String
+  siteId      String?
   title       String
   slug        String
   content     String
@@ -121,9 +122,10 @@ model Page {
   publishedAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-  site        Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  site        Site?     @relation(fields: [siteId], references: [id], onDelete: SetNull)
 
-  @@unique([siteId, slug])
+  @@unique([slug])
+  @@index([tenantId])
   @@index([siteId])
 }
 

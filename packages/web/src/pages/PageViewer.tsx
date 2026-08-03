@@ -3,20 +3,29 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Typography, Spin, Result, Button } from 'antd';
 import { ArrowLeftOutlined, PictureOutlined } from '@ant-design/icons';
 import axios from 'axios';
+import { API_BASE_URL } from '../config/api';
 
 const { Title, Text, Paragraph } = Typography;
+
+// 解析图片 URL（相对路径拼接后端地址）
+const resolveImageUrl = (url: string) => {
+  if (!url) return '';
+  if (url.startsWith('http')) return url;
+  return `${API_BASE_URL}${url}`;
+};
 
 // 图片组件（带加载失败回退）
 function ImageComponent({ props }: { props: any }) {
   const [imgError, setImgError] = useState(false);
-  if (!props.url || imgError) {
+  const resolvedUrl = resolveImageUrl(props.url);
+  if (!resolvedUrl || imgError) {
     return (
       <div style={{ width: props.width || '100%', height: 200, background: '#f5f5f5', borderRadius: props.borderRadius || 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999', margin: '12px 0', border: '1px dashed #d9d9d9' }}>
         <PictureOutlined style={{ fontSize: 24, marginRight: 8 }} /> {props.url ? '图片加载失败' : '图片（请在编辑器中设置图片URL）'}
       </div>
     );
   }
-  return <img src={props.url} alt={props.alt} style={{ width: props.width, height: props.height, borderRadius: props.borderRadius, display: 'block', margin: '12px 0' }} onError={() => setImgError(true)} />;
+  return <img src={resolvedUrl} alt={props.alt} style={{ width: props.width, height: props.height, borderRadius: props.borderRadius, display: 'block', margin: '12px 0' }} onError={() => setImgError(true)} />;
 }
 
 // 组件渲染（与PageBuilder一致）

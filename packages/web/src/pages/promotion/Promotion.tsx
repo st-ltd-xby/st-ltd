@@ -57,17 +57,9 @@ function PagePromotion() {
 
   const loadPages = async () => {
     try {
-      const res: any = await cmsApi.getSites({ pageSize: '100' });
-      if (res.code === 0) {
-        const sites = Array.isArray(res.data) ? res.data : (res.data?.list || []);
-        // 加载所有页面
-        const allPages: any[] = [];
-        for (const site of sites) {
-          const pageRes: any = await cmsApi.getPages(site.id);
-          if (pageRes.code === 0 && pageRes.data) {
-            allPages.push(...pageRes.data.map((p: any) => ({ ...p, siteName: site.name })));
-          }
-        }
+      const res: any = await cmsApi.getPages();
+      if (res.code === 0 && res.data) {
+        const allPages = res.data;
         setPages(allPages);
         if (allPages.length > 0) {
           setSelectedPageId(allPages[0].id);
@@ -195,7 +187,7 @@ function PagePromotion() {
               optionFilterProp="children"
             >
               {pages.map(p => (
-                <Select.Option key={p.id} value={p.id}>{p.title} ({p.siteName})</Select.Option>
+                <Select.Option key={p.id} value={p.id}>{p.title}</Select.Option>
               ))}
             </Select>
           </Space>
@@ -270,25 +262,18 @@ function TrackingLinks() {
     } catch {}
   };
 
-  // 加载页面搭建的推广链接
+  // 加载页面搭建的推广链接（独立页面，不依赖站点）
   const loadPageLinks = async () => {
     setPageLinkLoading(true);
     try {
-      const sitesRes: any = await cmsApi.getSites({ pageSize: '100' });
-      if (sitesRes.code === 0) {
-        const sites = Array.isArray(sitesRes.data) ? sitesRes.data : (sitesRes.data?.list || []);
-        const allPages: any[] = [];
+      const pagesRes: any = await cmsApi.getPages();
+      if (pagesRes.code === 0 && pagesRes.data) {
+        const allPages = pagesRes.data;
         const allPageLinks: any[] = [];
-        for (const site of sites) {
-          const pageRes: any = await cmsApi.getPages(site.id);
-          if (pageRes.code === 0 && pageRes.data) {
-            for (const p of pageRes.data) {
-              allPages.push({ ...p, siteName: site.name });
-              const linkRes: any = await cmsApi.getPageLinks(p.id);
-              if (linkRes.code === 0 && linkRes.data?.length > 0) {
-                allPageLinks.push(...linkRes.data.map((l: any) => ({ ...l, pageTitle: p.title, siteName: site.name })));
-              }
-            }
+        for (const p of allPages) {
+          const linkRes: any = await cmsApi.getPageLinks(p.id);
+          if (linkRes.code === 0 && linkRes.data?.length > 0) {
+            allPageLinks.push(...linkRes.data.map((l: any) => ({ ...l, pageTitle: p.title })));
           }
         }
         setPages(allPages);
@@ -408,7 +393,7 @@ function TrackingLinks() {
         </div>
       );
     }},
-    { title: '所属页面', dataIndex: 'pageTitle', key: 'pageTitle', render: (v: string, r: any) => <span>{v} <Text type="secondary">({r.siteName})</Text></span> },
+    { title: '所属页面', dataIndex: 'pageTitle', key: 'pageTitle', render: (v: string) => <strong>{v}</strong> },
     { title: '目标地址', dataIndex: 'targetUrl', key: 'targetUrl', ellipsis: true },
     { title: '点击', dataIndex: 'clickCount', key: 'clickCount', render: (v: number) => <Text strong style={{ color: v > 0 ? '#1677ff' : '#999' }}>{v}</Text> },
     { title: '转化', dataIndex: 'leadCount', key: 'leadCount', render: (v: number) => <Text strong style={{ color: v > 0 ? '#52c41a' : '#999' }}>{v}</Text> },
@@ -455,7 +440,7 @@ function TrackingLinks() {
               placeholder="选择页面"
             >
               {pages.map(p => (
-                <Select.Option key={p.id} value={p.id}>{p.title} ({p.siteName})</Select.Option>
+                <Select.Option key={p.id} value={p.id}>{p.title}</Select.Option>
               ))}
             </Select>
             <Button type="primary" icon={<PlusOutlined />} onClick={handleGeneratePageLink} loading={generating} disabled={!selectedPageId}>
@@ -930,21 +915,13 @@ function SeoTools() {
     setLoading(false);
   };
 
-  // 加载所有页面及其SEO信息
+  // 加载所有页面及其SEO信息（独立页面，不依赖站点）
   const loadPages = async () => {
     setPageSeoLoading(true);
     try {
-      const sitesRes: any = await cmsApi.getSites({ pageSize: '100' });
-      if (sitesRes.code === 0) {
-        const sites = Array.isArray(sitesRes.data) ? sitesRes.data : (sitesRes.data?.list || []);
-        const allPages: any[] = [];
-        for (const site of sites) {
-          const pageRes: any = await cmsApi.getPages(site.id);
-          if (pageRes.code === 0 && pageRes.data) {
-            allPages.push(...pageRes.data.map((p: any) => ({ ...p, siteName: site.name, siteId: site.id })));
-          }
-        }
-        setPages(allPages);
+      const pageRes: any = await cmsApi.getPages();
+      if (pageRes.code === 0 && pageRes.data) {
+        setPages(pageRes.data);
       }
     } catch {}
     setPageSeoLoading(false);
@@ -1143,7 +1120,7 @@ function SeoTools() {
           pagination={{ pageSize: 5 }}
           locale={{ emptyText: '暂无页面，请先在页面搭建中创建页面' }}
           columns={[
-            { title: '页面标题', dataIndex: 'title', key: 'title', render: (v: string, r: any) => <span>{v} <Text type="secondary">({r.siteName})</Text></span> },
+            { title: '页面标题', dataIndex: 'title', key: 'title', render: (v: string) => <strong>{v}</strong> },
             { title: '路径', dataIndex: 'slug', key: 'slug', render: (v: string) => <Tag>/p/{v}</Tag> },
             { title: 'SEO标题', dataIndex: 'seoTitle', key: 'seoTitle', ellipsis: true, render: (v: string) => v ? <Text style={{ color: '#52c41a' }}>{v}</Text> : <Text type="secondary">未设置</Text> },
             { title: 'SEO描述', dataIndex: 'seoDesc', key: 'seoDesc', ellipsis: true, render: (v: string) => v ? <Text style={{ color: '#52c41a' }}>{v}</Text> : <Text type="secondary">未设置</Text> },

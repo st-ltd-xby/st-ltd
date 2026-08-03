@@ -96,9 +96,22 @@ router.delete('/sites/:id', async (req: Request, res: Response) => {
   }
 });
 
-// ===== 页面管理 =====
+// ===== 页面管理（独立页面，不依赖站点） =====
 
-// 获取页面列表
+// 获取所有页面列表（独立，不按站点过滤）
+router.get('/pages', async (req: Request, res: Response) => {
+  try {
+    const pages = await prisma.page.findMany({
+      where: { tenantId: req.user!.tenantId },
+      orderBy: { updatedAt: 'desc' },
+    });
+    success(res, pages);
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 获取站点下的页面列表（兼容旧接口）
 router.get('/sites/:siteId/pages', async (req: Request, res: Response) => {
   try {
     const pages = await prisma.page.findMany({
@@ -111,17 +124,42 @@ router.get('/sites/:siteId/pages', async (req: Request, res: Response) => {
   }
 });
 
-// 创建页面
+// 创建页面（独立，siteId 可选）
+router.post('/pages', async (req: Request, res: Response) => {
+  try {
+    const { title, slug, content, seoTitle, seoDesc, seoKeywords, siteId } = req.body;
+    const page = await prisma.page.create({
+      data: {
+        tenantId: req.user!.tenantId,
+        siteId: siteId || null,
+        title,
+        slug: slug || title.toLowerCase().replace(/\s+/g, '-'),
+        content: content || '{}',
+        seoTitle,
+        seoDesc,
+        seoKeywords,
+        status: 'published',
+        publishedAt: new Date(),
+      },
+    });
+    success(res, page, '页面创建成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 创建页面（兼容旧接口 /sites/:siteId/pages）
 router.post('/sites/:siteId/pages', async (req: Request, res: Response) => {
   try {
     const siteId = Array.isArray(req.params.siteId) ? req.params.siteId[0] : req.params.siteId;
     const { title, slug, content, seoTitle, seoDesc, seoKeywords } = req.body;
     const page = await prisma.page.create({
       data: {
+        tenantId: req.user!.tenantId,
         siteId,
         title,
         slug: slug || title.toLowerCase().replace(/\s+/g, '-'),
-        content: content || {},
+        content: content || '{}',
         seoTitle,
         seoDesc,
         seoKeywords,
