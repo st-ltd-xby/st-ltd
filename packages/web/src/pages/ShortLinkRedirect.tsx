@@ -20,7 +20,7 @@ export default function ShortLinkRedirect() {
 
     const resolveAndRedirect = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/v1/t/${shortCode}?resolve=true`, {
+        const res = await fetch(`${API_BASE_URL}/t/${shortCode}?resolve=true`, {
           headers: { Accept: 'application/json' },
         });
         const data = await res.json();
