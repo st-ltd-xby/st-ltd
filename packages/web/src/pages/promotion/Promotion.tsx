@@ -49,6 +49,9 @@ function PagePromotion() {
   const [links, setLinks] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [qrModal, setQrModal] = useState(false);
+  const [qrUrl, setQrUrl] = useState('');
+  const [qrImage, setQrImage] = useState('');
 
   useEffect(() => { loadPages(); }, []);
 
@@ -109,6 +112,32 @@ function PagePromotion() {
     message.success('推广链接已复制，可用于推送');
   };
 
+  const previewLink = (link: any) => {
+    const url = link.shortUrl || `${window.location.origin}/t/${link.shortCode}`;
+    window.open(url, '_blank');
+  };
+
+  const showQrCode = async (link: any) => {
+    const url = link.shortUrl || `${window.location.origin}/t/${link.shortCode}`;
+    setQrUrl(url);
+    try {
+      const res: any = await promotionApi.generateQrCode({ url });
+      if (res.code === 0) setQrImage(res.data.imageUrl);
+    } catch { /* ignore */ }
+    setQrModal(true);
+  };
+
+  const deleteLink = async (link: any) => {
+    try {
+      // 通过 promotion API 删除追踪链接
+      const res: any = await promotionApi.deleteTrackingLink(link.id);
+      if (res.code === 0) {
+        message.success('链接已删除');
+        fetchLinks(selectedPageId);
+      }
+    } catch { message.error('删除失败'); }
+  };
+
   const copyAllLinks = () => {
     const allUrls = links.map(l => l.shortUrl || `${window.location.origin}/t/${l.shortCode}`).join('\n');
     navigator.clipboard.writeText(allUrls);
@@ -116,16 +145,29 @@ function PagePromotion() {
   };
 
   const columns = [
-    { title: '短链接', dataIndex: 'shortCode', key: 'shortCode', render: (code: string) => (
-      <Tag color="blue" style={{ cursor: 'pointer' }} onClick={() => navigator.clipboard.writeText(`${window.location.origin}/t/${code}`)}>{`/t/${code}`}</Tag>
-    )},
-    { title: '目标地址', dataIndex: 'targetUrl', key: 'targetUrl', ellipsis: true },
+    { title: '短链接', dataIndex: 'shortCode', key: 'shortCode', render: (code: string, record: any) => {
+      const fullUrl = record.shortUrl || `${window.location.origin}/t/${code}`;
+      return (
+        <div>
+          <Tag color="blue" style={{ cursor: 'pointer' }} onClick={() => { navigator.clipboard.writeText(fullUrl); message.success('已复制'); }}>{`/t/${code}`}</Tag>
+          <div style={{ fontSize: 12, color: '#999', marginTop: 2 }}>{fullUrl}</div>
+        </div>
+      );
+    }},
+    { title: '目标页面', dataIndex: 'targetUrl', key: 'targetUrl', ellipsis: true },
     { title: '来源', dataIndex: 'utmSource', key: 'utmSource', render: (v: string) => v ? <Tag>{v}</Tag> : '-' },
-    { title: '点击数', dataIndex: 'clickCount', key: 'clickCount', sorter: (a: any, b: any) => a.clickCount - b.clickCount },
-    { title: '转化数', dataIndex: 'leadCount', key: 'leadCount' },
+    { title: '点击', dataIndex: 'clickCount', key: 'clickCount', sorter: (a: any, b: any) => a.clickCount - b.clickCount, render: (v: number) => <Text strong style={{ color: v > 0 ? '#1677ff' : '#999' }}>{v}</Text> },
+    { title: '转化', dataIndex: 'leadCount', key: 'leadCount', render: (v: number) => <Text strong style={{ color: v > 0 ? '#52c41a' : '#999' }}>{v}</Text> },
     { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', render: (v: string) => new Date(v).toLocaleDateString() },
-    { title: '操作', key: 'action', width: 100, render: (_: any, record: any) => (
-      <Button size="small" icon={<CopyOutlined />} onClick={() => copyLink(record)}>复制</Button>
+    { title: '操作', key: 'action', width: 220, render: (_: any, record: any) => (
+      <Space size="small">
+        <Tooltip title="复制链接"><Button size="small" icon={<CopyOutlined />} onClick={() => copyLink(record)} /></Tooltip>
+        <Tooltip title="预览链接"><Button size="small" icon={<EyeOutlined />} onClick={() => previewLink(record)} /></Tooltip>
+        <Tooltip title="生成二维码"><Button size="small" icon={<QrcodeOutlined />} onClick={() => showQrCode(record)} /></Tooltip>
+        <Popconfirm title="确定删除此推广链接？" onConfirm={() => deleteLink(record)}>
+          <Button size="small" danger icon={<DeleteOutlined />} />
+        </Popconfirm>
+      </Space>
     )},
   ];
 
@@ -159,7 +201,7 @@ function PagePromotion() {
           </Space>
           <Space>
             <Button icon={<PlusOutlined />} type="primary" onClick={handleGenerate} loading={generating} disabled={!selectedPageId}>生成新链接</Button>
-            {links.length > 1 && <Button icon={<CopyOutlined />} onClick={copyAllLinks}>复制全部</Button>}
+            {links.length > 0 && <Button icon={<CopyOutlined />} onClick={copyAllLinks}>复制全部</Button>}
           </Space>
         </div>
         {currentPage && (
@@ -176,9 +218,24 @@ function PagePromotion() {
           rowKey="id"
           loading={loading}
           pagination={{ pageSize: 10 }}
-          locale={{ emptyText: '该页面还没有推广链接，点击“生成新链接”创建' }}
+          locale={{ emptyText: '该页面还没有推广链接，点击"生成新链接"创建' }}
         />
       </Card>
+
+      {/* 二维码弹窗 */}
+      <Modal title="推广链接二维码" open={qrModal} onCancel={() => setQrModal(false)} footer={[
+        <Button key="close" onClick={() => setQrModal(false)}>关闭</Button>,
+        <Button key="copy" type="primary" icon={<CopyOutlined />} onClick={() => { navigator.clipboard.writeText(qrUrl); message.success('链接已复制'); }}>复制链接</Button>,
+      ]}>
+        <div style={{ textAlign: 'center' }}>
+          {qrImage ? (
+            <img src={qrImage} alt="QR Code" style={{ maxWidth: 256, maxHeight: 256 }} />
+          ) : (
+            <div style={{ padding: 40, color: '#999' }}>二维码生成中...</div>
+          )}
+          <div style={{ marginTop: 12, wordBreak: 'break-all', fontSize: 13, color: '#666' }}>{qrUrl}</div>
+        </div>
+      </Modal>
     </div>
   );
 }

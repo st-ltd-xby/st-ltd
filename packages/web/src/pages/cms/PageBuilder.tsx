@@ -442,7 +442,6 @@ export default function PageBuilder() {
       }
       console.log('保存结果:', res);
       if (res.code === 0) {
-        message.success(currentPageId ? '页面更新成功' : '页面创建成功');
         const savedPageId = res.data?.id || currentPageId;
         if (savedPageId) setCurrentPageId(savedPageId);
         // 生成二级链接
@@ -451,10 +450,11 @@ export default function PageBuilder() {
         setPageUrl(url);
         setSaveModal(false);
         loadPages(selectedSiteId);
-        // 自动生成推广链接
+        // 自动生成推广链接（静默）
         if (savedPageId) {
           await generatePromotionLink(savedPageId);
         }
+        message.success(currentPageId ? '页面更新成功，推广链接已生成' : '页面创建成功，推广链接已生成');
       } else {
         message.error(res.message || '保存失败');
       }
@@ -466,17 +466,14 @@ export default function PageBuilder() {
     }
   };
 
-  // 生成推广链接
+  // 生成推广链接（静默生成，不弹窗）
   const generatePromotionLink = async (pageId: string) => {
-    setGenerating(true);
     try {
       const res: any = await cmsApi.generatePageLink(pageId);
       if (res.code === 0) {
-        setPromotionLinks([res.data]);
-        setPromotionModal(true);
+        message.success('推广链接已自动生成，可在「推广工具」中查看');
       }
     } catch { /* ignore */ }
-    setGenerating(false);
   };
 
   // 获取已有推广链接
