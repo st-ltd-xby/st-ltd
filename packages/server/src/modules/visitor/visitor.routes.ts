@@ -1,8 +1,8 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import prisma from '../../common/prisma';
 import { success, fail } from '../../common/response';
 
-const router = Router();
+const router: Router = Router();
 
 /**
  * 访客追踪接口（公开，无需认证）

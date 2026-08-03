@@ -159,6 +159,51 @@ router.delete('/pages/:id', async (req: Request, res: Response) => {
   }
 });
 
+// 为页面生成推广链接（创建 TrackingLink）
+router.post('/pages/:id/generate-link', async (req: Request, res: Response) => {
+  try {
+    const pageId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const page = await prisma.page.findUnique({ where: { id: pageId }, include: { site: true } });
+    if (!page) return notFound(res, '页面不存在');
+
+    const shortCode = Math.random().toString(36).substring(2, 10);
+    const baseUrl = process.env.BASE_URL || req.protocol + '://' + req.get('host');
+    const targetUrl = `${baseUrl}/p/${page.slug}`;
+
+    const link = await prisma.trackingLink.create({
+      data: {
+        shortCode,
+        targetUrl,
+        utmSource: req.body.utmSource || 'page-builder',
+        utmMedium: req.body.utmMedium || 'promotion',
+        utmCampaign: req.body.utmCampaign || page.title,
+      },
+    });
+
+    const shortUrl = `${baseUrl}/t/${shortCode}`;
+    success(res, { id: link.id, shortCode, shortUrl, targetUrl, clickCount: 0 }, '推广链接生成成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 获取页面的推广链接列表
+router.get('/pages/:id/links', async (req: Request, res: Response) => {
+  try {
+    const pageId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const page = await prisma.page.findUnique({ where: { id: pageId } });
+    if (!page) return notFound(res, '页面不存在');
+
+    const links = await prisma.trackingLink.findMany({
+      where: { targetUrl: { contains: page.slug } },
+      orderBy: { createdAt: 'desc' },
+    });
+    success(res, links);
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
 // ===== 表单管理 =====
 
 // 获取表单列表

@@ -1,23 +1,24 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Card, Tabs, Button, Space, Input, Modal, Form, message, Tag, Select,
-  Popconfirm, Row, Col, Upload, Image, Empty, Tooltip,
-  Typography, Drawer, Descriptions, Table
+  Card, Button, Space, Input, Modal, Form, message, Tag, Select,
+  Upload, Empty, Tooltip, QRCode, Divider, InputNumber,
+  Switch, Typography, Alert
 } from 'antd';
 import {
-  PictureOutlined, VideoCameraOutlined, FileTextOutlined,
-  UploadOutlined, PlusOutlined, DeleteOutlined, EditOutlined,
-  EyeOutlined, SearchOutlined, ReloadOutlined, PlayCircleOutlined,
-  FileOutlined, LinkOutlined, CopyOutlined
+  FontSizeOutlined, PictureOutlined,
+  BorderOutlined, ColumnWidthOutlined, VideoCameraOutlined,
+  FormOutlined, DeleteOutlined, EditOutlined, EyeOutlined,
+  UploadOutlined, PlusOutlined, LinkOutlined,
+  ArrowUpOutlined, ArrowDownOutlined, SaveOutlined,
+  FolderOutlined, ThunderboltOutlined, CheckCircleOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
 
-const { TabPane } = Tabs;
 const { TextArea } = Input;
 const { Text } = Typography;
 
-const ADMIN_API = `${API_BASE_URL}/api/v1/admin`;
+const CMS_API = `${API_BASE_URL}/api/v1/cms`;
 const UPLOAD_API = `${API_BASE_URL}/api/v1`;
 
 const getAuthHeaders = () => ({
@@ -26,79 +27,136 @@ const getAuthHeaders = () => ({
 
 // ==================== Types ====================
 
-interface ImageItem {
+interface PageComponent {
   id: string;
-  name: string;
-  url: string;
-  size: number;
-  mimeType: string;
-  createdAt: string;
+  type: 'title' | 'text' | 'image' | 'button' | 'divider' | 'spacing' | 'video' | 'form';
+  props: Record<string, any>;
 }
 
-interface ContentItem {
-  id: string;
+interface PageData {
+  id?: string;
   title: string;
-  summary?: string;
-  content: string;
-  coverImage?: string;
-  type: 'article' | 'video' | 'whitepaper';
-  videoUrl?: string;
-  documentUrl?: string;
-  status: 'draft' | 'published' | 'archived';
-  tags: string;
-  viewCount: number;
-  shareCount: number;
-  createdAt: string;
-  updatedAt: string;
+  slug: string;
+  siteId: string;
+  content: PageComponent[];
+  status: 'draft' | 'published';
+  seoTitle?: string;
+  seoDesc?: string;
 }
 
-const typeConfig: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
-  article: { label: '\u56fe\u6587', color: 'blue', icon: <FileTextOutlined /> },
-  video: { label: '\u89c6\u9891', color: 'orange', icon: <VideoCameraOutlined /> },
-  whitepaper: { label: '\u6587\u4ef6', color: 'purple', icon: <FileOutlined /> },
-};
+interface PromotionLink {
+  id: string;
+  shortCode: string;
+  shortUrl: string;
+  targetUrl: string;
+  clickCount: number;
+}
 
-const statusConfig: Record<string, { label: string; color: string }> = {
-  draft: { label: '\u8349\u7a3f', color: 'default' },
-  published: { label: '\u5df2\u53d1\u5e03', color: 'success' },
-  archived: { label: '\u5df2\u5f52\u6863', color: 'warning' },
-};
+// ==================== Component Library ====================
 
-// ==================== Image Library ====================
+const COMPONENT_LIBRARY = [
+  { type: 'title' as const, label: '标题', icon: <FontSizeOutlined />, defaultProps: { text: '请输入标题', fontSize: 28, color: '#333', align: 'left' } },
+  { type: 'text' as const, label: '文本段落', icon: <FontSizeOutlined />, defaultProps: { text: '请输入文本内容', fontSize: 16, color: '#666', lineHeight: 1.8, align: 'left' } },
+  { type: 'image' as const, label: '图片', icon: <PictureOutlined />, defaultProps: { url: '', alt: '图片', borderRadius: 8, width: '100%' } },
+  { type: 'button' as const, label: '按钮', icon: <BorderOutlined />, defaultProps: { text: '点击按钮', link: '', color: '#1677ff', size: 'middle' } },
+  { type: 'divider' as const, label: '分割线', icon: <ColumnWidthOutlined />, defaultProps: { color: '#e8e8e8', dashed: false } },
+  { type: 'spacing' as const, label: '间距', icon: <ColumnWidthOutlined />, defaultProps: { height: 24 } },
+  { type: 'video' as const, label: '视频', icon: <VideoCameraOutlined />, defaultProps: { url: '', poster: '', autoplay: false } },
+  { type: 'form' as const, label: '表单', icon: <FormOutlined />, defaultProps: { title: '联系我们', fields: [{ name: '姓名', type: 'text', required: true }, { name: '电话', type: 'tel', required: true }, { name: '留言', type: 'textarea', required: false }] } },
+];
 
-function ImageLibrary() {
-  const [images, setImages] = useState<ImageItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [search, setSearch] = useState('');
-  const [previewImage, setPreviewImage] = useState<string>('');
-  const [previewVisible, setPreviewVisible] = useState(false);
+// ==================== Component Renderer ====================
 
-  const fetchImages = async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({ page: '1', pageSize: '100' });
-      if (search) params.append('search', search);
-      const res = await axios.get(`${ADMIN_API}/images?${params}`, { headers: getAuthHeaders() });
-      if (res.data.code === 0 || res.data.code === 200) {
-        setImages(res.data.data?.list || []);
+function ComponentRenderer({ comp, selected, onClick }: { comp: PageComponent; selected: boolean; onClick: () => void }) {
+  const renderComponent = () => {
+    switch (comp.type) {
+      case 'title':
+        return <h2 style={{ fontSize: comp.props.fontSize || 28, color: comp.props.color || '#333', textAlign: comp.props.align || 'left', margin: 0 }}>{comp.props.text || '标题'}</h2>;
+      case 'text':
+        return <p style={{ fontSize: comp.props.fontSize || 16, color: comp.props.color || '#666', lineHeight: comp.props.lineHeight || 1.8, textAlign: comp.props.align || 'left', margin: 0, whiteSpace: 'pre-wrap' }}>{comp.props.text || '文本内容'}</p>;
+      case 'image': {
+        const imgUrl = comp.props.url
+          ? (comp.props.url.startsWith('/') ? API_BASE_URL + comp.props.url : comp.props.url)
+          : '';
+        return imgUrl ? (
+          <img src={imgUrl} alt={comp.props.alt || ''} style={{ width: comp.props.width || '100%', borderRadius: comp.props.borderRadius || 0, objectFit: 'cover', display: 'block' }} />
+        ) : (
+          <div style={{ width: '100%', minHeight: 160, background: '#f5f5f5', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999', border: '2px dashed #d9d9d9' }}>
+            <PictureOutlined style={{ fontSize: 24, marginRight: 8 }} />
+            <span>点击右侧设置图片</span>
+          </div>
+        );
       }
-    } catch { /* ignore */ }
-    finally { setLoading(false); }
+      case 'button':
+        return (
+          <Button type="primary" size={comp.props.size || 'middle'} style={{ background: comp.props.color || '#1677ff', borderColor: comp.props.color || '#1677ff', fontSize: 16, padding: '8px 32px' }}>
+            {comp.props.text || '按钮'}
+          </Button>
+        );
+      case 'divider':
+        return <Divider style={{ borderColor: comp.props.color || '#e8e8e8', borderStyle: comp.props.dashed ? 'dashed' : 'solid', margin: '16px 0' }} />;
+      case 'spacing':
+        return <div style={{ height: comp.props.height || 24 }} />;
+      case 'video': {
+        const videoUrl = comp.props.url
+          ? (comp.props.url.startsWith('/') ? API_BASE_URL + comp.props.url : comp.props.url)
+          : '';
+        return videoUrl ? (
+          <video src={videoUrl} poster={comp.props.poster} controls style={{ width: '100%', borderRadius: 8 }} />
+        ) : (
+          <div style={{ width: '100%', minHeight: 200, background: '#000', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+            <VideoCameraOutlined style={{ fontSize: 32, marginRight: 8 }} />
+            <span>设置视频地址</span>
+          </div>
+        );
+      }
+      case 'form':
+        return (
+          <div style={{ background: '#fafafa', padding: 24, borderRadius: 8, border: '1px solid #f0f0f0' }}>
+            <h3 style={{ marginBottom: 16 }}>{comp.props.title || '表单'}</h3>
+            {(comp.props.fields || []).map((f: any, i: number) => (
+              <div key={i} style={{ marginBottom: 12 }}>
+                <label style={{ display: 'block', marginBottom: 4, fontSize: 14, color: '#333' }}>{f.name}{f.required && <span style={{ color: 'red' }}> *</span>}</label>
+                {f.type === 'textarea' ? (
+                  <TextArea rows={3} placeholder={`请输入${f.name}`} disabled style={{ background: '#fff' }} />
+                ) : (
+                  <Input placeholder={`请输入${f.name}`} disabled style={{ background: '#fff' }} />
+                )}
+              </div>
+            ))}
+            <Button type="primary" block>提交</Button>
+          </div>
+        );
+      default:
+        return <div>未知组件</div>;
+    }
   };
 
-  useEffect(() => { fetchImages(); }, []);
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        padding: 12,
+        marginBottom: 8,
+        border: selected ? '2px solid #1677ff' : '2px solid transparent',
+        borderRadius: 8,
+        cursor: 'pointer',
+        position: 'relative',
+        background: selected ? '#e6f4ff' : '#fff',
+        transition: 'all 0.2s',
+      }}
+    >
+      {renderComponent()}
+    </div>
+  );
+}
 
-  const handleDelete = async (id: string) => {
-    try {
-      const res = await axios.delete(`${ADMIN_API}/images/${id}`, { headers: getAuthHeaders() });
-      if (res.data.code === 0 || res.data.code === 200) {
-        message.success('\u5220\u9664\u6210\u529f');
-        fetchImages();
-      }
-    } catch { message.error('\u5220\u9664\u5931\u8d25'); }
-  };
+// ==================== Property Panel ====================
 
-  const handleUpload = async (file: File) => {
+function PropertyPanel({ comp, onChange }: { comp: PageComponent; onChange: (props: any) => void }) {
+  const p = comp.props;
+
+  const handleImageUpload = async (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
     try {
@@ -106,386 +164,18 @@ function ImageLibrary() {
         headers: { ...getAuthHeaders(), 'Content-Type': 'multipart/form-data' },
       });
       if (res.data.code === 0) {
-        message.success('\u56fe\u7247\u4e0a\u4f20\u6210\u529f');
-        fetchImages();
+        onChange({ ...comp.props, url: res.data.data.url });
+        message.success('图片上传成功');
       } else {
-        message.error(res.data.message || '\u4e0a\u4f20\u5931\u8d25');
+        message.error(res.data.message || '上传失败');
       }
-    } catch { message.error('\u4e0a\u4f20\u5931\u8d25'); }
+    } catch {
+      message.error('上传失败');
+    }
     return false;
   };
 
-  const formatSize = (bytes: number) => {
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / 1024 / 1024).toFixed(1) + ' MB';
-  };
-
-  return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <Space>
-          <Input
-            placeholder="\u641c\u7d22\u56fe\u7247\u540d\u79f0..."
-            prefix={<SearchOutlined />}
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            onPressEnter={fetchImages}
-            style={{ width: 220 }}
-            allowClear
-          />
-          <Button icon={<ReloadOutlined />} onClick={fetchImages}>{'\u5237\u65b0'}</Button>
-        </Space>
-        <Upload accept="image/*" showUploadList={false} beforeUpload={handleUpload} multiple>
-          <Button type="primary" icon={<UploadOutlined />}>{'\u4e0a\u4f20\u56fe\u7247'}</Button>
-        </Upload>
-      </div>
-
-      {images.length === 0 ? (
-        <Empty description="\u6682\u65e0\u56fe\u7247\uff0c\u70b9\u51fb\u4e0a\u65b9\u6309\u94ae\u4e0a\u4f20" style={{ padding: 60 }} />
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 16 }}>
-          {images.map(img => (
-            <Card
-              key={img.id}
-              hoverable
-              size="small"
-              cover={
-                <div style={{ height: 150, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f5f5f5', overflow: 'hidden', cursor: 'pointer' }}
-                  onClick={() => { setPreviewImage(img.url); setPreviewVisible(true); }}>
-                  <img src={img.url.startsWith('/') ? API_BASE_URL + img.url : img.url} alt={img.name}
-                    style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-                </div>
-              }
-              actions={[
-                <Tooltip title="\u9884\u89c8" key="view"><EyeOutlined onClick={() => { setPreviewImage(img.url); setPreviewVisible(true); }} /></Tooltip>,
-                <Tooltip title="\u590d\u5236\u94fe\u63a5" key="copy">
-                  <CopyOutlined onClick={() => {
-                    const fullUrl = img.url.startsWith('/') ? API_BASE_URL + img.url : img.url;
-                    navigator.clipboard.writeText(fullUrl);
-                    message.success('\u94fe\u63a5\u5df2\u590d\u5236');
-                  }} />
-                </Tooltip>,
-                <Popconfirm title="\u786e\u5b9a\u5220\u9664\u6b64\u56fe\u7247\uff1f" onConfirm={() => handleDelete(img.id)} key="del">
-                  <DeleteOutlined style={{ color: '#ff4d4f' }} />
-                </Popconfirm>,
-              ]}
-            >
-              <Card.Meta
-                title={<Text ellipsis style={{ fontSize: 13 }}>{img.name}</Text>}
-                description={<Text type="secondary" style={{ fontSize: 11 }}>{formatSize(img.size)} {'\u00b7'} {new Date(img.createdAt).toLocaleDateString('zh-CN')}</Text>}
-              />
-            </Card>
-          ))}
-        </div>
-      )}
-
-      <Image
-        src={previewImage.startsWith('/') ? API_BASE_URL + previewImage : previewImage}
-        style={{ display: 'none' }}
-        preview={{ visible: previewVisible, onVisibleChange: setPreviewVisible }}
-      />
-    </div>
-  );
-}
-
-// ==================== Content Library ====================
-
-function ContentLibrary() {
-  const [articles, setArticles] = useState<ContentItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [search, setSearch] = useState('');
-  const [filterType, setFilterType] = useState('all');
-  const [filterStatus, setFilterStatus] = useState('all');
-  const [modalVisible, setModalVisible] = useState(false);
-  const [current, setCurrent] = useState<ContentItem | null>(null);
-  const [drawerVisible, setDrawerVisible] = useState(false);
-  const [detail, setDetail] = useState<ContentItem | null>(null);
-  const [form] = Form.useForm();
-  const [selectedType, setSelectedType] = useState('article');
-
-  const fetchArticles = async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({ page: '1', pageSize: '100' });
-      if (search) params.append('search', search);
-      if (filterType !== 'all') params.append('type', filterType);
-      if (filterStatus !== 'all') params.append('status', filterStatus);
-      const res = await axios.get(`${ADMIN_API}/articles?${params}`, { headers: getAuthHeaders() });
-      if (res.data.code === 0 || res.data.code === 200) {
-        setArticles(res.data.data?.list || []);
-      }
-    } catch { /* ignore */ }
-    finally { setLoading(false); }
-  };
-
-  useEffect(() => { fetchArticles(); }, []);
-
-  const handleSubmit = async () => {
-    try {
-      const values = await form.validateFields();
-      const isEdit = !!current;
-      const url = isEdit ? `${ADMIN_API}/articles/${current.id}` : `${ADMIN_API}/articles`;
-      const method = isEdit ? 'put' : 'post';
-      const res = await axios[method](url, values, { headers: getAuthHeaders() });
-      if (res.data.code === 0 || res.data.code === 200) {
-        message.success(isEdit ? '\u5185\u5bb9\u66f4\u65b0\u6210\u529f' : '\u5185\u5bb9\u521b\u5efa\u6210\u529f');
-        setModalVisible(false);
-        form.resetFields();
-        setCurrent(null);
-        fetchArticles();
-      }
-    } catch (e: any) {
-      if (!e.errorFields) message.error('\u64cd\u4f5c\u5931\u8d25');
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    try {
-      const res = await axios.delete(`${ADMIN_API}/articles/${id}`, { headers: getAuthHeaders() });
-      if (res.data.code === 0 || res.data.code === 200) {
-        message.success('\u5220\u9664\u6210\u529f');
-        fetchArticles();
-      }
-    } catch { message.error('\u5220\u9664\u5931\u8d25'); }
-  };
-
-  const openCreate = (type: string = 'article') => {
-    form.resetFields();
-    setCurrent(null);
-    setSelectedType(type);
-    form.setFieldsValue({ type, status: 'draft' });
-    setModalVisible(true);
-  };
-
-  const openEdit = (record: ContentItem) => {
-    setCurrent(record);
-    setSelectedType(record.type);
-    form.setFieldsValue({
-      title: record.title, type: record.type, status: record.status,
-      summary: record.summary, content: record.content, coverImage: record.coverImage,
-      videoUrl: record.videoUrl, documentUrl: record.documentUrl, tags: record.tags,
-    });
-    setModalVisible(true);
-  };
-
-  return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
-        <Space wrap>
-          <Input placeholder="\u641c\u7d22\u6807\u9898..." prefix={<SearchOutlined />} value={search}
-            onChange={e => setSearch(e.target.value)} onPressEnter={fetchArticles} style={{ width: 200 }} allowClear />
-          <Select value={filterType} onChange={setFilterType} style={{ width: 120 }}>
-            <Select.Option value="all">{'\u5168\u90e8\u7c7b\u578b'}</Select.Option>
-            <Select.Option value="article">{'\u56fe\u6587'}</Select.Option>
-            <Select.Option value="video">{'\u89c6\u9891'}</Select.Option>
-            <Select.Option value="whitepaper">{'\u6587\u4ef6'}</Select.Option>
-          </Select>
-          <Select value={filterStatus} onChange={setFilterStatus} style={{ width: 120 }}>
-            <Select.Option value="all">{'\u5168\u90e8\u72b6\u6001'}</Select.Option>
-            <Select.Option value="draft">{'\u8349\u7a3f'}</Select.Option>
-            <Select.Option value="published">{'\u5df2\u53d1\u5e03'}</Select.Option>
-            <Select.Option value="archived">{'\u5df2\u5f52\u6863'}</Select.Option>
-          </Select>
-          <Button icon={<ReloadOutlined />} onClick={fetchArticles}>{'\u5237\u65b0'}</Button>
-        </Space>
-        <Space>
-          <Button icon={<PlusOutlined />} onClick={() => openCreate('article')}>{'\u65b0\u589e\u56fe\u6587'}</Button>
-          <Button icon={<VideoCameraOutlined />} onClick={() => openCreate('video')} style={{ color: '#fa8c16', borderColor: '#fa8c16' }}>{'\u65b0\u589e\u89c6\u9891'}</Button>
-          <Button icon={<FileOutlined />} onClick={() => openCreate('whitepaper')} style={{ color: '#722ed1', borderColor: '#722ed1' }}>{'\u65b0\u589e\u6587\u4ef6'}</Button>
-        </Space>
-      </div>
-
-      <Table dataSource={articles} rowKey="id" loading={loading}
-        pagination={{ pageSize: 10, showSizeChanger: true, showTotal: t => `\u5171 ${t} \u6761` }}>
-        <Table.Column title={"\u6807\u9898"} dataIndex="title" key="title"
-          render={(title, r: ContentItem) => <a onClick={() => { setDetail(r); setDrawerVisible(true); }}>{title}</a>} />
-        <Table.Column title={"\u7c7b\u578b"} dataIndex="type" key="type" width={90}
-          render={(type) => { const cfg = typeConfig[type]; return cfg ? <Tag color={cfg.color} icon={cfg.icon}>{cfg.label}</Tag> : type; }} />
-        <Table.Column title={"\u72b6\u6001"} dataIndex="status" key="status" width={90}
-          render={(status) => { const cfg = statusConfig[status]; return cfg ? <Tag color={cfg.color}>{cfg.label}</Tag> : status; }} />
-        <Table.Column title={"\u5c01\u9762"} dataIndex="coverImage" key="coverImage" width={80}
-          render={(url) => url ? <img src={url.startsWith('/') ? API_BASE_URL + url : url} alt="" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4 }} /> : '-'} />
-        <Table.Column title={"\u6d4f\u89c8"} dataIndex="viewCount" key="viewCount" width={70} />
-        <Table.Column title={"\u6807\u7b7e"} dataIndex="tags" key="tags"
-          render={(tags) => tags ? tags.split(',').filter(Boolean).slice(0, 3).map((t: string, i: number) => <Tag key={i}>{t}</Tag>) : '-'} />
-        <Table.Column title={"\u521b\u5efa\u65f6\u95f4"} dataIndex="createdAt" key="createdAt" width={160}
-          render={(d) => d ? new Date(d).toLocaleString('zh-CN') : '-'} />
-        <Table.Column title={"\u64cd\u4f5c"} key="action" width={120}
-          render={(_: any, record: ContentItem) => (
-            <Space size="small">
-              <Tooltip title={"\u7f16\u8f91"}><Button type="link" size="small" icon={<EditOutlined />} onClick={() => openEdit(record)} /></Tooltip>
-              <Popconfirm title={"\u786e\u5b9a\u5220\u9664\uff1f"} onConfirm={() => handleDelete(record.id)}>
-                <Button type="link" size="small" danger icon={<DeleteOutlined />} />
-              </Popconfirm>
-            </Space>
-          )} />
-      </Table>
-
-      <Modal title={current ? '\u7f16\u8f91\u5185\u5bb9' : '\u65b0\u589e\u5185\u5bb9'} open={modalVisible}
-        onOk={handleSubmit} onCancel={() => { setModalVisible(false); form.resetFields(); setCurrent(null); }}
-        width={640} destroyOnClose okText={current ? '\u66f4\u65b0' : '\u521b\u5efa'} cancelText={"\u53d6\u6d88"}>
-        <Form form={form} layout="vertical" initialValues={{ type: 'article', status: 'draft' }}>
-          <Form.Item name="title" label={"\u6807\u9898"} rules={[{ required: true, message: '\u8bf7\u8f93\u5165\u6807\u9898' }]}>
-            <Input placeholder={"\u8bf7\u8f93\u5165\u6807\u9898"} />
-          </Form.Item>
-          <Form.Item name="type" label={"\u7c7b\u578b"} rules={[{ required: true }]}>
-            <Select onChange={(v: string) => setSelectedType(v)}>
-              <Select.Option value="article"><FileTextOutlined /> {'\u56fe\u6587'}</Select.Option>
-              <Select.Option value="video"><VideoCameraOutlined /> {'\u89c6\u9891'}</Select.Option>
-              <Select.Option value="whitepaper"><FileOutlined /> {'\u6587\u4ef6/\u767d\u76ae\u4e66'}</Select.Option>
-            </Select>
-          </Form.Item>
-          <Form.Item name="summary" label={"\u6458\u8981"}>
-            <TextArea placeholder={"\u7b80\u8981\u63cf\u8ff0\u5185\u5bb9"} rows={2} />
-          </Form.Item>
-          <Form.Item name="content" label={"\u6b63\u6587\u5185\u5bb9"}>
-            <TextArea placeholder={"\u8bf7\u8f93\u5165\u8be6\u7ec6\u5185\u5bb9"} rows={4} />
-          </Form.Item>
-          <Form.Item name="coverImage" label={"\u5c01\u9762\u56fe\u7247"}>
-            <Input placeholder={"\u8f93\u5165\u56fe\u7247URL\u6216\u4ece\u56fe\u7247\u5e93\u590d\u5236"} addonAfter={
-              <Upload accept="image/*" showUploadList={false} beforeUpload={async (file) => {
-                const formData = new FormData();
-                formData.append('file', file);
-                try {
-                  const res = await axios.post(`${UPLOAD_API}/upload`, formData, {
-                    headers: { ...getAuthHeaders(), 'Content-Type': 'multipart/form-data' },
-                  });
-                  if (res.data.code === 0) {
-                    form.setFieldsValue({ coverImage: res.data.data.url });
-                    message.success('\u5c01\u9762\u4e0a\u4f20\u6210\u529f');
-                  }
-                } catch { message.error('\u4e0a\u4f20\u5931\u8d25'); }
-                return false;
-              }}><UploadOutlined style={{ cursor: 'pointer' }} /></Upload>
-            } />
-          </Form.Item>
-          {selectedType === 'video' && (
-            <Form.Item name="videoUrl" label={"\u89c6\u9891\u5730\u5740"}>
-              <Input placeholder={"\u8f93\u5165\u89c6\u9891URL\u6216\u4e0a\u4f20"} addonAfter={
-                <Upload accept="video/*" showUploadList={false} beforeUpload={async (file) => {
-                  const formData = new FormData();
-                  formData.append('file', file);
-                  try {
-                    const res = await axios.post(`${UPLOAD_API}/upload/video`, formData, {
-                      headers: { ...getAuthHeaders(), 'Content-Type': 'multipart/form-data' },
-                    });
-                    if (res.data.code === 0) {
-                      form.setFieldsValue({ videoUrl: res.data.data.url });
-                      message.success('\u89c6\u9891\u4e0a\u4f20\u6210\u529f');
-                    }
-                  } catch { message.error('\u4e0a\u4f20\u5931\u8d25'); }
-                  return false;
-                }}><UploadOutlined style={{ cursor: 'pointer' }} /></Upload>
-              } />
-            </Form.Item>
-          )}
-          {selectedType === 'whitepaper' && (
-            <Form.Item name="documentUrl" label={"\u6587\u6863\u5730\u5740"}>
-              <Input placeholder={"\u8f93\u5165\u6587\u6863URL"} />
-            </Form.Item>
-          )}
-          <Form.Item name="status" label={"\u72b6\u6001"}>
-            <Select>
-              <Select.Option value="draft">{'\u8349\u7a3f'}</Select.Option>
-              <Select.Option value="published">{'\u53d1\u5e03'}</Select.Option>
-              <Select.Option value="archived">{'\u5f52\u6863'}</Select.Option>
-            </Select>
-          </Form.Item>
-          <Form.Item name="tags" label={"\u6807\u7b7e"}>
-            <Input placeholder={"\u9017\u53f7\u5206\u9694\uff0c\u5982\uff1a\u79d1\u6280,\u8425\u9500,\u4ea7\u54c1"} />
-          </Form.Item>
-        </Form>
-      </Modal>
-
-      <Drawer title={detail?.title} open={drawerVisible}
-        onClose={() => { setDrawerVisible(false); setDetail(null); }} width={500}>
-        {detail && (
-          <>
-            <Descriptions column={1} bordered size="small">
-              <Descriptions.Item label={"\u7c7b\u578b"}>
-                {(() => { const c = typeConfig[detail.type]; return c ? <Tag color={c.color} icon={c.icon}>{c.label}</Tag> : detail.type; })()}
-              </Descriptions.Item>
-              <Descriptions.Item label={"\u72b6\u6001"}>
-                {(() => { const c = statusConfig[detail.status]; return c ? <Tag color={c.color}>{c.label}</Tag> : detail.status; })()}
-              </Descriptions.Item>
-              <Descriptions.Item label={"\u6458\u8981"}>{detail.summary || '-'}</Descriptions.Item>
-              {detail.videoUrl && <Descriptions.Item label={"\u89c6\u9891"}><a href={detail.videoUrl.startsWith('/') ? API_BASE_URL + detail.videoUrl : detail.videoUrl} target="_blank" rel="noreferrer">{'\u64ad\u653e\u89c6\u9891'}</a></Descriptions.Item>}
-              {detail.documentUrl && <Descriptions.Item label={"\u6587\u6863"}><a href={detail.documentUrl} target="_blank" rel="noreferrer">{'\u67e5\u770b\u6587\u6863'}</a></Descriptions.Item>}
-              <Descriptions.Item label={"\u5c01\u9762"}>{detail.coverImage ? <img src={detail.coverImage.startsWith('/') ? API_BASE_URL + detail.coverImage : detail.coverImage} alt="" style={{ maxWidth: 200 }} /> : '-'}</Descriptions.Item>
-              <Descriptions.Item label={"\u6807\u7b7e"}>{detail.tags || '-'}</Descriptions.Item>
-              <Descriptions.Item label={"\u6d4f\u89c8/\u5206\u4eab"}>{detail.viewCount} / {detail.shareCount}</Descriptions.Item>
-              <Descriptions.Item label={"\u521b\u5efa\u65f6\u95f4"}>{new Date(detail.createdAt).toLocaleString('zh-CN')}</Descriptions.Item>
-            </Descriptions>
-            {detail.content && (
-              <Card size="small" title={"\u6b63\u6587"} style={{ marginTop: 16 }}>
-                <div style={{ whiteSpace: 'pre-wrap' }}>{detail.content}</div>
-              </Card>
-            )}
-          </>
-        )}
-      </Drawer>
-    </div>
-  );
-}
-
-// ==================== Video Library ====================
-
-function VideoLibrary() {
-  const [videos, setVideos] = useState<ContentItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [search, setSearch] = useState('');
-  const [modalVisible, setModalVisible] = useState(false);
-  const [current, setCurrent] = useState<ContentItem | null>(null);
-  const [form] = Form.useForm();
-  const [uploading, setUploading] = useState(false);
-
-  const fetchVideos = async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({ page: '1', pageSize: '100', type: 'video' });
-      if (search) params.append('search', search);
-      const res = await axios.get(`${ADMIN_API}/articles?${params}`, { headers: getAuthHeaders() });
-      if (res.data.code === 0 || res.data.code === 200) {
-        setVideos(res.data.data?.list || []);
-      }
-    } catch { /* ignore */ }
-    finally { setLoading(false); }
-  };
-
-  useEffect(() => { fetchVideos(); }, []);
-
-  const handleSubmit = async () => {
-    try {
-      const values = await form.validateFields();
-      const isEdit = !!current;
-      const url = isEdit ? `${ADMIN_API}/articles/${current.id}` : `${ADMIN_API}/articles`;
-      const method = isEdit ? 'put' : 'post';
-      const res = await axios[method](url, { ...values, type: 'video' }, { headers: getAuthHeaders() });
-      if (res.data.code === 0 || res.data.code === 200) {
-        message.success(isEdit ? '\u89c6\u9891\u66f4\u65b0\u6210\u529f' : '\u89c6\u9891\u6dfb\u52a0\u6210\u529f');
-        setModalVisible(false);
-        form.resetFields();
-        setCurrent(null);
-        fetchVideos();
-      }
-    } catch (e: any) {
-      if (!e.errorFields) message.error('\u64cd\u4f5c\u5931\u8d25');
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    try {
-      const res = await axios.delete(`${ADMIN_API}/articles/${id}`, { headers: getAuthHeaders() });
-      if (res.data.code === 0 || res.data.code === 200) {
-        message.success('\u5220\u9664\u6210\u529f');
-        fetchVideos();
-      }
-    } catch { message.error('\u5220\u9664\u5931\u8d25'); }
-  };
-
   const handleVideoUpload = async (file: File) => {
-    setUploading(true);
     const formData = new FormData();
     formData.append('file', file);
     try {
@@ -493,114 +183,147 @@ function VideoLibrary() {
         headers: { ...getAuthHeaders(), 'Content-Type': 'multipart/form-data' },
       });
       if (res.data.code === 0) {
-        form.setFieldsValue({ videoUrl: res.data.data.url });
-        if (!form.getFieldValue('title')) {
-          form.setFieldsValue({ title: file.name.replace(/\.[^.]+$/, '') });
-        }
-        message.success('\u89c6\u9891\u4e0a\u4f20\u6210\u529f');
+        onChange({ ...comp.props, url: res.data.data.url });
+        message.success('视频上传成功');
+      } else {
+        message.error(res.data.message || '上传失败');
       }
-    } catch { message.error('\u89c6\u9891\u4e0a\u4f20\u5931\u8d25'); }
-    finally { setUploading(false); }
+    } catch {
+      message.error('上传失败');
+    }
     return false;
   };
 
-  return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <Space>
-          <Input placeholder={"\u641c\u7d22\u89c6\u9891..."} prefix={<SearchOutlined />} value={search}
-            onChange={e => setSearch(e.target.value)} onPressEnter={fetchVideos} style={{ width: 220 }} allowClear />
-          <Button icon={<ReloadOutlined />} onClick={fetchVideos}>{'\u5237\u65b0'}</Button>
-        </Space>
-        <Button type="primary" icon={<UploadOutlined />}
-          onClick={() => { form.resetFields(); setCurrent(null); setModalVisible(true); }}>{'\u6dfb\u52a0\u89c6\u9891'}</Button>
-      </div>
-
-      {videos.length === 0 ? (
-        <Empty description={"\u6682\u65e0\u89c6\u9891\uff0c\u70b9\u51fb\u4e0a\u65b9\u6309\u94ae\u6dfb\u52a0"} style={{ padding: 60 }} />
-      ) : (
-        <Row gutter={[16, 16]}>
-          {videos.map(v => (
-            <Col key={v.id} xs={24} sm={12} md={8} lg={6}>
-              <Card hoverable size="small"
-                cover={
-                  <div style={{ height: 160, background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', borderRadius: '8px 8px 0 0', overflow: 'hidden' }}>
-                    {v.coverImage ? (
-                      <img src={v.coverImage.startsWith('/') ? API_BASE_URL + v.coverImage : v.coverImage} alt={v.title}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    ) : (
-                      <PlayCircleOutlined style={{ fontSize: 48, color: '#fff' }} />
-                    )}
-                    <div style={{ position: 'absolute', bottom: 8, right: 8, background: 'rgba(0,0,0,0.6)', color: '#fff', padding: '2px 8px', borderRadius: 4, fontSize: 12 }}>
-                      <Tag color="orange" style={{ margin: 0 }}>{'\u89c6\u9891'}</Tag>
-                    </div>
+  const renderProperties = () => {
+    switch (comp.type) {
+      case 'title':
+        return (
+          <>
+            <Form.Item label="标题文字"><Input value={p.text} onChange={e => onChange({ ...p, text: e.target.value })} /></Form.Item>
+            <Form.Item label="字体大小"><InputNumber value={p.fontSize} onChange={v => onChange({ ...p, fontSize: v })} min={16} max={72} style={{ width: '100%' }} /></Form.Item>
+            <Form.Item label="文字颜色"><Input type="color" value={p.color || '#333333'} onChange={e => onChange({ ...p, color: e.target.value })} style={{ width: '100%', height: 36 }} /></Form.Item>
+            <Form.Item label="对齐方式">
+              <Select value={p.align || 'left'} onChange={v => onChange({ ...p, align: v })} style={{ width: '100%' }}>
+                <Select.Option value="left">左对齐</Select.Option>
+                <Select.Option value="center">居中</Select.Option>
+                <Select.Option value="right">右对齐</Select.Option>
+              </Select>
+            </Form.Item>
+          </>
+        );
+      case 'text':
+        return (
+          <>
+            <Form.Item label="文本内容"><TextArea value={p.text} onChange={e => onChange({ ...p, text: e.target.value })} rows={4} /></Form.Item>
+            <Form.Item label="字体大小"><InputNumber value={p.fontSize} onChange={v => onChange({ ...p, fontSize: v })} min={12} max={32} style={{ width: '100%' }} /></Form.Item>
+            <Form.Item label="文字颜色"><Input type="color" value={p.color || '#666666'} onChange={e => onChange({ ...p, color: e.target.value })} style={{ width: '100%', height: 36 }} /></Form.Item>
+            <Form.Item label="行高"><InputNumber value={p.lineHeight} onChange={v => onChange({ ...p, lineHeight: v })} min={1} max={3} step={0.1} style={{ width: '100%' }} /></Form.Item>
+            <Form.Item label="对齐方式">
+              <Select value={p.align || 'left'} onChange={v => onChange({ ...p, align: v })} style={{ width: '100%' }}>
+                <Select.Option value="left">左对齐</Select.Option>
+                <Select.Option value="center">居中</Select.Option>
+                <Select.Option value="right">右对齐</Select.Option>
+              </Select>
+            </Form.Item>
+          </>
+        );
+      case 'image':
+        return (
+          <>
+            <Form.Item label="图片URL">
+              <Space.Compact style={{ width: '100%' }}>
+                <Input value={p.url || ''} onChange={e => onChange({ ...p, url: e.target.value })} placeholder="输入图片地址或上传" />
+                <Upload accept="image/*" showUploadList={false} beforeUpload={handleImageUpload}>
+                  <Button icon={<UploadOutlined />}>上传</Button>
+                </Upload>
+              </Space.Compact>
+            </Form.Item>
+            <Form.Item label="替代文字"><Input value={p.alt || ''} onChange={e => onChange({ ...p, alt: e.target.value })} /></Form.Item>
+            <Form.Item label="圆角"><InputNumber value={p.borderRadius} onChange={v => onChange({ ...p, borderRadius: v })} min={0} max={50} style={{ width: '100%' }} /></Form.Item>
+            {p.url && p.url.startsWith('/') && (
+              <Alert message={`图片地址: ${API_BASE_URL}${p.url}`} type="info" showIcon style={{ fontSize: 12 }} />
+            )}
+          </>
+        );
+      case 'button':
+        return (
+          <>
+            <Form.Item label="按钮文字"><Input value={p.text} onChange={e => onChange({ ...p, text: e.target.value })} /></Form.Item>
+            <Form.Item label="跳转链接"><Input value={p.link || ''} onChange={e => onChange({ ...p, link: e.target.value })} placeholder="https://..." /></Form.Item>
+            <Form.Item label="按钮颜色"><Input type="color" value={p.color || '#1677ff'} onChange={e => onChange({ ...p, color: e.target.value })} style={{ width: '100%', height: 36 }} /></Form.Item>
+            <Form.Item label="按钮大小">
+              <Select value={p.size || 'middle'} onChange={v => onChange({ ...p, size: v })} style={{ width: '100%' }}>
+                <Select.Option value="small">小</Select.Option>
+                <Select.Option value="middle">中</Select.Option>
+                <Select.Option value="large">大</Select.Option>
+              </Select>
+            </Form.Item>
+          </>
+        );
+      case 'divider':
+        return (
+          <>
+            <Form.Item label="分割线颜色"><Input type="color" value={p.color || '#e8e8e8'} onChange={e => onChange({ ...p, color: e.target.value })} style={{ width: '100%', height: 36 }} /></Form.Item>
+            <Form.Item label="虚线"><Switch checked={p.dashed} onChange={v => onChange({ ...p, dashed: v })} /></Form.Item>
+          </>
+        );
+      case 'spacing':
+        return (
+          <Form.Item label="间距高度(px)"><InputNumber value={p.height} onChange={v => onChange({ ...p, height: v })} min={0} max={200} style={{ width: '100%' }} /></Form.Item>
+        );
+      case 'video':
+        return (
+          <>
+            <Form.Item label="视频URL">
+              <Space.Compact style={{ width: '100%' }}>
+                <Input value={p.url || ''} onChange={e => onChange({ ...p, url: e.target.value })} placeholder="输入视频地址或上传" />
+                <Upload accept="video/*" showUploadList={false} beforeUpload={handleVideoUpload}>
+                  <Button icon={<UploadOutlined />}>上传</Button>
+                </Upload>
+              </Space.Compact>
+            </Form.Item>
+            <Form.Item label="封面图URL"><Input value={p.poster || ''} onChange={e => onChange({ ...p, poster: e.target.value })} placeholder="视频封面图" /></Form.Item>
+            <Form.Item label="自动播放"><Switch checked={p.autoplay} onChange={v => onChange({ ...p, autoplay: v })} /></Form.Item>
+          </>
+        );
+      case 'form':
+        return (
+          <>
+            <Form.Item label="表单标题"><Input value={p.title} onChange={e => onChange({ ...p, title: e.target.value })} /></Form.Item>
+            <Form.Item label="表单字段">
+              <div>
+                {(p.fields || []).map((f: any, i: number) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+                    <Input value={f.name} onChange={e => { const fields = [...p.fields]; fields[i] = { ...fields[i], name: e.target.value }; onChange({ ...p, fields }); }} placeholder="字段名" style={{ flex: 1 }} />
+                    <Select value={f.type} onChange={v => { const fields = [...p.fields]; fields[i] = { ...fields[i], type: v }; onChange({ ...p, fields }); }} style={{ width: 100 }}>
+                      <Select.Option value="text">文本</Select.Option>
+                      <Select.Option value="tel">电话</Select.Option>
+                      <Select.Option value="email">邮箱</Select.Option>
+                      <Select.Option value="textarea">多行</Select.Option>
+                    </Select>
+                    <Switch checked={f.required} onChange={v => { const fields = [...p.fields]; fields[i] = { ...fields[i], required: v }; onChange({ ...p, fields }); }} size="small" />
+                    <Button type="link" danger icon={<DeleteOutlined />} onClick={() => { const fields = p.fields.filter((_: any, j: number) => j !== i); onChange({ ...p, fields }); }} />
                   </div>
-                }
-                actions={[
-                  <Tooltip title={"\u7f16\u8f91"} key="edit">
-                    <EditOutlined onClick={() => {
-                      setCurrent(v);
-                      form.setFieldsValue({ title: v.title, summary: v.summary, videoUrl: v.videoUrl, coverImage: v.coverImage, tags: v.tags, status: v.status });
-                      setModalVisible(true);
-                    }} />
-                  </Tooltip>,
-                  <Tooltip title={"\u590d\u5236\u94fe\u63a5"} key="copy">
-                    <CopyOutlined onClick={() => {
-                      const url = v.videoUrl?.startsWith('/') ? API_BASE_URL + v.videoUrl : v.videoUrl;
-                      navigator.clipboard.writeText(url || '');
-                      message.success('\u94fe\u63a5\u5df2\u590d\u5236');
-                    }} />
-                  </Tooltip>,
-                  <Popconfirm title={"\u786e\u5b9a\u5220\u9664\u6b64\u89c6\u9891\uff1f"} onConfirm={() => handleDelete(v.id)} key="del">
-                    <DeleteOutlined style={{ color: '#ff4d4f' }} />
-                  </Popconfirm>,
-                ]}
-              >
-                <Card.Meta
-                  title={<Text ellipsis style={{ fontSize: 13 }}>{v.title}</Text>}
-                  description={<Text type="secondary" style={{ fontSize: 11 }}>{v.status === 'published' ? '\u5df2\u53d1\u5e03' : '\u8349\u7a3f'} {'\u00b7'} {new Date(v.createdAt).toLocaleDateString('zh-CN')}</Text>}
-                />
-              </Card>
-            </Col>
-          ))}
-        </Row>
-      )}
+                ))}
+                <Button type="dashed" block icon={<PlusOutlined />} onClick={() => onChange({ ...p, fields: [...(p.fields || []), { name: '新字段', type: 'text', required: false }] })}>
+                  添加字段
+                </Button>
+              </div>
+            </Form.Item>
+          </>
+        );
+      default:
+        return null;
+    }
+  };
 
-      <Modal title={current ? '\u7f16\u8f91\u89c6\u9891' : '\u6dfb\u52a0\u89c6\u9891'} open={modalVisible}
-        onOk={handleSubmit} onCancel={() => { setModalVisible(false); form.resetFields(); setCurrent(null); }}
-        width={560} destroyOnClose okText={current ? '\u66f4\u65b0' : '\u6dfb\u52a0'} cancelText={"\u53d6\u6d88"}>
-        <Form form={form} layout="vertical" initialValues={{ status: 'draft' }}>
-          <Form.Item label={"\u4e0a\u4f20\u89c6\u9891\u6587\u4ef6"}>
-            <Upload accept="video/*" showUploadList={false} beforeUpload={handleVideoUpload} disabled={uploading}>
-              <Button icon={<UploadOutlined />} loading={uploading} block>
-                {uploading ? '\u4e0a\u4f20\u4e2d...' : '\u9009\u62e9\u89c6\u9891\u6587\u4ef6\u4e0a\u4f20\uff08\u6700\u5927 100MB\uff09'}
-              </Button>
-            </Upload>
-          </Form.Item>
-          <Form.Item name="title" label={"\u89c6\u9891\u6807\u9898"} rules={[{ required: true, message: '\u8bf7\u8f93\u5165\u89c6\u9891\u6807\u9898' }]}>
-            <Input placeholder={"\u8bf7\u8f93\u5165\u89c6\u9891\u6807\u9898"} />
-          </Form.Item>
-          <Form.Item name="videoUrl" label={"\u89c6\u9891\u5730\u5740"} rules={[{ required: true, message: '\u8bf7\u8f93\u5165\u6216\u4e0a\u4f20\u89c6\u9891\u5730\u5740' }]}>
-            <Input placeholder={"\u89c6\u9891URL\uff08\u652f\u6301\u4e0a\u4f20\u6216\u5916\u90e8\u94fe\u63a5\uff09"} />
-          </Form.Item>
-          <Form.Item name="coverImage" label={"\u5c01\u9762\u56fe"}>
-            <Input placeholder={"\u5c01\u9762\u56feURL\uff08\u53ef\u9009\uff09"} />
-          </Form.Item>
-          <Form.Item name="summary" label={"\u7b80\u4ecb"}>
-            <TextArea placeholder={"\u89c6\u9891\u7b80\u4ecb"} rows={2} />
-          </Form.Item>
-          <Form.Item name="tags" label={"\u6807\u7b7e"}>
-            <Input placeholder={"\u9017\u53f7\u5206\u9694"} />
-          </Form.Item>
-          <Form.Item name="status" label={"\u72b6\u6001"}>
-            <Select>
-              <Select.Option value="draft">{'\u8349\u7a3f'}</Select.Option>
-              <Select.Option value="published">{'\u53d1\u5e03'}</Select.Option>
-              <Select.Option value="archived">{'\u5f52\u6863'}</Select.Option>
-            </Select>
-          </Form.Item>
-        </Form>
-      </Modal>
+  return (
+    <div style={{ padding: 16 }}>
+      <div style={{ marginBottom: 16 }}>
+        <Tag color="blue">{COMPONENT_LIBRARY.find(c => c.type === comp.type)?.label || comp.type}</Tag>
+        <Text type="secondary" style={{ marginLeft: 8 }}>ID: {comp.id}</Text>
+      </div>
+      {renderProperties()}
     </div>
   );
 }
@@ -608,23 +331,327 @@ function VideoLibrary() {
 // ==================== Main Component ====================
 
 export default function PageBuilder() {
-  const [activeTab, setActiveTab] = useState('images');
+  const [pages, setPages] = useState<any[]>([]);
+  const [currentPage, setCurrentPage] = useState<PageData | null>(null);
+  const [components, setComponents] = useState<PageComponent[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [showPageModal, setShowPageModal] = useState(false);
+  const [showPromotionModal, setShowPromotionModal] = useState(false);
+  const [promotionLinks, setPromotionLinks] = useState<PromotionLink[]>([]);
+  const [pageForm] = Form.useForm();
+  const [showPageList, setShowPageList] = useState(false);
+
+  const fetchPages = async () => {
+    try {
+      const res = await axios.get(`${CMS_API}/sites/default/pages`, { headers: getAuthHeaders() });
+      if (res.data.code === 0 || res.data.code === 200) {
+        setPages(res.data.data || []);
+      }
+    } catch { /* ignore */ }
+  };
+
+  useEffect(() => { fetchPages(); }, []);
+
+  const addComponent = (type: PageComponent['type']) => {
+    const libItem = COMPONENT_LIBRARY.find(c => c.type === type);
+    if (!libItem) return;
+    const newComp: PageComponent = {
+      id: `comp_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+      type,
+      props: { ...libItem.defaultProps },
+    };
+    setComponents(prev => [...prev, newComp]);
+    setSelectedId(newComp.id);
+  };
+
+  const updateComponent = (id: string, props: any) => {
+    setComponents(prev => prev.map(c => c.id === id ? { ...c, props } : c));
+  };
+
+  const deleteComponent = (id: string) => {
+    setComponents(prev => prev.filter(c => c.id !== id));
+    if (selectedId === id) setSelectedId(null);
+  };
+
+  const moveComponent = (id: string, direction: 'up' | 'down') => {
+    setComponents(prev => {
+      const idx = prev.findIndex(c => c.id === id);
+      if (idx < 0) return prev;
+      const newIdx = direction === 'up' ? idx - 1 : idx + 1;
+      if (newIdx < 0 || newIdx >= prev.length) return prev;
+      const arr = [...prev];
+      [arr[idx], arr[newIdx]] = [arr[newIdx], arr[idx]];
+      return arr;
+    });
+  };
+
+  const handleSave = async () => {
+    if (!currentPage?.title) {
+      message.warning('请先设置页面标题');
+      setShowPageModal(true);
+      return;
+    }
+    setSaving(true);
+    try {
+      const pageData = {
+        title: currentPage.title,
+        slug: currentPage.slug || currentPage.title.toLowerCase().replace(/\s+/g, '-'),
+        content: JSON.stringify(components),
+        seoTitle: currentPage.seoTitle,
+        seoDesc: currentPage.seoDesc,
+        status: currentPage.status,
+      };
+      let res;
+      if (currentPage.id) {
+        res = await axios.put(`${CMS_API}/pages/${currentPage.id}`, pageData, { headers: getAuthHeaders() });
+      } else {
+        res = await axios.post(`${CMS_API}/sites/default/pages`, pageData, { headers: getAuthHeaders() });
+      }
+      if (res.data.code === 0 || res.data.code === 200) {
+        const savedPage = res.data.data;
+        setCurrentPage(prev => prev ? { ...prev, id: savedPage.id } : null);
+        message.success('页面保存成功');
+        setShowPromotionModal(true);
+        fetchPromotionLinks(savedPage.id);
+        fetchPages();
+      } else {
+        message.error(res.data.message || '保存失败');
+      }
+    } catch (err: any) {
+      message.error(err.response?.data?.message || '保存失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const fetchPromotionLinks = async (pageId: string) => {
+    try {
+      const res = await axios.get(`${CMS_API}/pages/${pageId}/links`, { headers: getAuthHeaders() });
+      if (res.data.code === 0) setPromotionLinks(res.data.data || []);
+    } catch { /* ignore */ }
+  };
+
+  const handleGenerateLink = async () => {
+    if (!currentPage?.id) { message.warning('请先保存页面'); return; }
+    try {
+      const res = await axios.post(`${CMS_API}/pages/${currentPage.id}/generate-link`, {
+        utmSource: 'page-builder', utmMedium: 'promotion',
+      }, { headers: getAuthHeaders() });
+      if (res.data.code === 0) {
+        message.success('推广链接生成成功');
+        fetchPromotionLinks(currentPage.id);
+      } else {
+        message.error(res.data.message || '生成失败');
+      }
+    } catch (err: any) {
+      message.error(err.response?.data?.message || '生成失败');
+    }
+  };
+
+  const handleNewPage = () => {
+    pageForm.resetFields();
+    pageForm.setFieldsValue({ title: '', slug: '', status: 'draft' });
+    setShowPageModal(true);
+  };
+
+  const handlePageFormOk = async () => {
+    try {
+      const values = await pageForm.validateFields();
+      setCurrentPage({
+        id: currentPage?.id,
+        title: values.title,
+        slug: values.slug || values.title.toLowerCase().replace(/\s+/g, '-'),
+        siteId: 'default',
+        content: components,
+        status: values.status || 'draft',
+        seoTitle: values.seoTitle,
+        seoDesc: values.seoDesc,
+      });
+      setShowPageModal(false);
+      message.success('页面信息已设置');
+    } catch { /* validation error */ }
+  };
+
+  const loadPage = async (page: any) => {
+    try {
+      const res = await axios.get(`${CMS_API}/sites/default/pages`, { headers: getAuthHeaders() });
+      if (res.data.code === 0 || res.data.code === 200) {
+        const pageList = res.data.data || [];
+        const found = pageList.find((p: any) => p.id === page.id);
+        if (found) {
+          let content: PageComponent[] = [];
+          try { content = typeof found.content === 'string' ? JSON.parse(found.content) : found.content || []; } catch { content = []; }
+          setCurrentPage({
+            id: found.id, title: found.title, slug: found.slug,
+            siteId: found.siteId || 'default', content,
+            status: found.status || 'draft',
+            seoTitle: found.seoTitle, seoDesc: found.seoDesc,
+          });
+          setComponents(content);
+          setSelectedId(null);
+          message.success(`已加载页面: ${found.title}`);
+        }
+      }
+    } catch { message.error('加载页面失败'); }
+  };
+
+  const selectedComp = components.find(c => c.id === selectedId);
 
   return (
-    <div>
-      <Card>
-        <Tabs activeKey={activeTab} onChange={setActiveTab}>
-          <TabPane tab={<span><PictureOutlined /> {'\u56fe\u7247\u5e93'}</span>} key="images">
-            <ImageLibrary />
-          </TabPane>
-          <TabPane tab={<span><FileTextOutlined /> {'\u6587\u6848\u5e93'}</span>} key="content">
-            <ContentLibrary />
-          </TabPane>
-          <TabPane tab={<span><VideoCameraOutlined /> {'\u89c6\u9891\u5e93'}</span>} key="videos">
-            <VideoLibrary />
-          </TabPane>
-        </Tabs>
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)' }}>
+      {/* 顶部工具栏 */}
+      <Card size="small" style={{ marginBottom: 12, borderRadius: 8 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Space>
+            <Text strong style={{ fontSize: 16 }}>页面搭建</Text>
+            {currentPage && <Tag color="green">编辑中: {currentPage.title}</Tag>}
+          </Space>
+          <Space>
+            <Button icon={<FolderOutlined />} onClick={() => setShowPageList(true)}>页面管理</Button>
+            <Button icon={<PlusOutlined />} onClick={handleNewPage}>新建页面</Button>
+            <Button icon={<EyeOutlined />} disabled={!currentPage}>预览</Button>
+            <Button type="primary" icon={<SaveOutlined />} onClick={handleSave} loading={saving}>保存页面</Button>
+          </Space>
+        </div>
       </Card>
+
+      <div style={{ display: 'flex', flex: 1, gap: 12, overflow: 'hidden' }}>
+        {/* 左侧：组件库 */}
+        <Card size="small" title="组件库" style={{ width: 200, flexShrink: 0, overflow: 'auto' }} bodyStyle={{ padding: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {COMPONENT_LIBRARY.map(item => (
+              <Button key={item.type} type="default" block icon={item.icon}
+                onClick={() => addComponent(item.type)}
+                style={{ height: 60, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>
+                {item.label}
+              </Button>
+            ))}
+          </div>
+        </Card>
+
+        {/* 中间：画布 */}
+        <Card size="small" style={{ flex: 1, overflow: 'auto' }} bodyStyle={{ padding: 20, minHeight: 400 }}>
+          {components.length === 0 ? (
+            <Empty description="从左侧点击组件添加到画布" style={{ marginTop: 100 }} />
+          ) : (
+            <div style={{ maxWidth: 800, margin: '0 auto' }}>
+              {components.map(comp => (
+                <div key={comp.id} style={{ position: 'relative' }}>
+                  <ComponentRenderer comp={comp} selected={selectedId === comp.id} onClick={() => setSelectedId(comp.id)} />
+                  {selectedId === comp.id && (
+                    <div style={{ position: 'absolute', top: 4, right: 4, display: 'flex', gap: 4, zIndex: 10 }}>
+                      <Tooltip title="上移"><Button size="small" icon={<ArrowUpOutlined />} onClick={(e) => { e.stopPropagation(); moveComponent(comp.id, 'up'); }} /></Tooltip>
+                      <Tooltip title="下移"><Button size="small" icon={<ArrowDownOutlined />} onClick={(e) => { e.stopPropagation(); moveComponent(comp.id, 'down'); }} /></Tooltip>
+                      <Tooltip title="删除"><Button size="small" danger icon={<DeleteOutlined />} onClick={(e) => { e.stopPropagation(); deleteComponent(comp.id); }} /></Tooltip>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+
+        {/* 右侧：属性面板 */}
+        <Card size="small" title="属性设置" style={{ width: 300, flexShrink: 0, overflow: 'auto' }} bodyStyle={{ padding: 0 }}>
+          {selectedComp ? (
+            <PropertyPanel comp={selectedComp} onChange={(props) => updateComponent(selectedComp.id, props)} />
+          ) : (
+            <div style={{ padding: 24, textAlign: 'center', color: '#999' }}>
+              <EditOutlined style={{ fontSize: 32, marginBottom: 12 }} />
+              <p>点击画布中的组件<br />编辑属性</p>
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* 新建页面弹窗 */}
+      <Modal title={currentPage?.id ? '编辑页面信息' : '新建页面'} open={showPageModal}
+        onOk={handlePageFormOk} onCancel={() => setShowPageModal(false)} destroyOnClose>
+        <Form form={pageForm} layout="vertical">
+          <Form.Item name="title" label="页面标题" rules={[{ required: true, message: '请输入标题' }]}>
+            <Input placeholder="如：高新安防产品介绍" />
+          </Form.Item>
+          <Form.Item name="slug" label="页面路径">
+            <Input placeholder="自动生成或手动输入，如：gaoxin-security" />
+          </Form.Item>
+          <Form.Item name="status" label="状态">
+            <Select>
+              <Select.Option value="draft">草稿</Select.Option>
+              <Select.Option value="published">发布</Select.Option>
+            </Select>
+          </Form.Item>
+          <Form.Item name="seoTitle" label="SEO标题"><Input placeholder="搜索引擎显示的标题" /></Form.Item>
+          <Form.Item name="seoDesc" label="SEO描述"><TextArea rows={2} placeholder="搜索引擎显示的描述" /></Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 页面列表弹窗 */}
+      <Modal title="页面管理" open={showPageList} onCancel={() => setShowPageList(false)} footer={null} width={700}>
+        {pages.length === 0 ? <Empty description="暂无页面" /> : (
+          <div>
+            {pages.map((page: any) => (
+              <Card key={page.id} size="small" style={{ marginBottom: 8, cursor: 'pointer', border: currentPage?.id === page.id ? '2px solid #1677ff' : undefined }}
+                onClick={() => { loadPage(page); setShowPageList(false); }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <Text strong>{page.title}</Text>
+                    <Tag style={{ marginLeft: 8 }} color={page.status === 'published' ? 'green' : 'default'}>
+                      {page.status === 'published' ? '已发布' : '草稿'}
+                    </Tag>
+                  </div>
+                  <Text type="secondary" style={{ fontSize: 12 }}>{new Date(page.createdAt).toLocaleDateString('zh-CN')}</Text>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </Modal>
+
+      {/* 推广链接弹窗 */}
+      <Modal title={<span><ThunderboltOutlined style={{ color: '#fa8c16', marginRight: 8 }} />推广链接</span>}
+        open={showPromotionModal} onCancel={() => setShowPromotionModal(false)} width={600}
+        footer={[
+          <Button key="close" onClick={() => setShowPromotionModal(false)}>关闭</Button>,
+          <Button key="gen" type="primary" icon={<LinkOutlined />} onClick={handleGenerateLink}>生成新推广链接</Button>,
+        ]}>
+        <Alert message="页面保存成功！" description="您可以生成推广链接，用于企业推广。每个链接都可以追踪点击数据。"
+          type="success" showIcon style={{ marginBottom: 16 }} />
+        {promotionLinks.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: 30 }}>
+            <LinkOutlined style={{ fontSize: 48, color: '#d9d9d9', marginBottom: 12 }} />
+            <p style={{ color: '#999' }}>暂无推广链接，点击下方按钮生成</p>
+          </div>
+        ) : (
+          <div>
+            {promotionLinks.map(link => (
+              <Card key={link.id} size="small" style={{ marginBottom: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ marginBottom: 8 }}>
+                      <Text type="secondary">推广链接：</Text>
+                      <Text copyable style={{ marginLeft: 8, color: '#1677ff' }}>{link.shortUrl}</Text>
+                    </div>
+                    <div>
+                      <Text type="secondary">目标地址：</Text>
+                      <Text style={{ marginLeft: 8, fontSize: 12 }}>{link.targetUrl}</Text>
+                    </div>
+                    <div style={{ marginTop: 4 }}>
+                      <Tag icon={<CheckCircleOutlined />} color="success">点击 {link.clickCount} 次</Tag>
+                      <Tag>Code: {link.shortCode}</Tag>
+                    </div>
+                  </div>
+                  <QRCode value={link.shortUrl} size={100} style={{ marginLeft: 16, flexShrink: 0 }} />
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+        <Divider />
+        <div style={{ textAlign: 'center' }}>
+          <Text type="secondary" style={{ fontSize: 12 }}>将推广链接分享到微信、微博、邮件等渠道，即可追踪推广效果</Text>
+        </div>
+      </Modal>
     </div>
   );
 }

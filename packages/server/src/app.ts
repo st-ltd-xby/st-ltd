@@ -55,11 +55,11 @@ app.use('/api/v1/cms', cmsRoutes);
 app.use('/api/v1/scrm', scrmRoutes);
 app.use('/api/v1/content', contentRoutes);
 app.use('/api/v1/mall', mallRoutes);
+app.use('/api/v1', visitorRoutes);
 app.use('/api/v1', dashboardRoutes);
 app.use('/api/v1/promotion', promotionRoutes);
 app.use('/api/v1/admin', adminRouter);
 app.use('/api/v1', uploadRoutes);
-app.use('/api/v1', visitorRoutes);
 app.use('/api/v1/agent', agentRoutes);
 app.use('/api/v1/ai', aiToolsRoutes);
 
