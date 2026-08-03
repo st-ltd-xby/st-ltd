@@ -249,19 +249,93 @@ function TrackingLinks() {
   const [modalOpen, setModalOpen] = useState(false);
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
+  const [filter, setFilter] = useState<string>('all'); // all | page-builder | manual
+  // 页面搭建推广链接
+  const [pageLinks, setPageLinks] = useState<any[]>([]);
+  const [pageLinkLoading, setPageLinkLoading] = useState(false);
+  const [selectedPageId, setSelectedPageId] = useState<string>('');
+  const [pages, setPages] = useState<any[]>([]);
+  const [generating, setGenerating] = useState(false);
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); loadPageLinks(); }, []);
 
   const loadData = async () => {
     try {
       const [linksRes, statsRes]: any[] = await Promise.all([
-        promotionApi.getTrackingLinks(),
+        promotionApi.getTrackingLinks({ pageSize: '100' }),
         promotionApi.getTrackingStats(),
       ]);
       if (linksRes.code === 0) setLinks(linksRes.data || []);
       if (statsRes.code === 0) setStats(statsRes.data);
     } catch {}
   };
+
+  // 加载页面搭建的推广链接
+  const loadPageLinks = async () => {
+    setPageLinkLoading(true);
+    try {
+      const sitesRes: any = await cmsApi.getSites({ pageSize: '100' });
+      if (sitesRes.code === 0) {
+        const sites = Array.isArray(sitesRes.data) ? sitesRes.data : (sitesRes.data?.list || []);
+        const allPages: any[] = [];
+        const allPageLinks: any[] = [];
+        for (const site of sites) {
+          const pageRes: any = await cmsApi.getPages(site.id);
+          if (pageRes.code === 0 && pageRes.data) {
+            for (const p of pageRes.data) {
+              allPages.push({ ...p, siteName: site.name });
+              const linkRes: any = await cmsApi.getPageLinks(p.id);
+              if (linkRes.code === 0 && linkRes.data?.length > 0) {
+                allPageLinks.push(...linkRes.data.map((l: any) => ({ ...l, pageTitle: p.title, siteName: site.name })));
+              }
+            }
+          }
+        }
+        setPages(allPages);
+        setPageLinks(allPageLinks);
+        if (allPages.length > 0 && !selectedPageId) {
+          setSelectedPageId(allPages[0].id);
+        }
+      }
+    } catch {}
+    setPageLinkLoading(false);
+  };
+
+  // 为选中页面生成推广链接
+  const handleGeneratePageLink = async () => {
+    if (!selectedPageId) return;
+    setGenerating(true);
+    try {
+      const res: any = await cmsApi.generatePageLink(selectedPageId);
+      if (res.code === 0) {
+        message.success('推广链接生成成功');
+        loadPageLinks();
+        loadData();
+      }
+    } catch { message.error('生成失败'); }
+    setGenerating(false);
+  };
+
+  const copyPageLink = (link: any) => {
+    const url = link.shortUrl || `${window.location.origin}/t/${link.shortCode}`;
+    navigator.clipboard.writeText(url);
+    message.success('推广链接已复制');
+  };
+
+  const deletePageLink = async (id: string) => {
+    try {
+      const res: any = await promotionApi.deleteTrackingLink(id);
+      if (res.code === 0) { message.success('链接已删除'); loadPageLinks(); loadData(); }
+    } catch { message.error('删除失败'); }
+  };
+
+  // 过滤链接
+  const filteredLinks = links.filter(l => {
+    if (filter === 'all') return true;
+    if (filter === 'page-builder') return l.utmSource === 'page-builder';
+    if (filter === 'manual') return l.utmSource !== 'page-builder';
+    return true;
+  });
 
   const handleCreate = async (values: any) => {
     setLoading(true);
@@ -298,13 +372,19 @@ function TrackingLinks() {
   };
 
   const columns = [
-    { title: '短链接', dataIndex: 'shortCode', key: 'shortCode', render: (code: string) => (
-      <Tag color="blue" style={{ cursor: 'pointer' }} onClick={() => navigator.clipboard.writeText(`${window.location.origin}/t/${code}`)}>{`/t/${code}`}</Tag>
-    )},
-    { title: '目标地址', dataIndex: 'targetUrl', key: 'targetUrl', ellipsis: true },
-    { title: '来源', dataIndex: 'utmSource', key: 'utmSource', render: (v: string) => v ? <Tag>{v}</Tag> : '-' },
-    { title: '点击数', dataIndex: 'clickCount', key: 'clickCount', sorter: (a: any, b: any) => a.clickCount - b.clickCount },
-    { title: '转化数', dataIndex: 'leadCount', key: 'leadCount' },
+    { title: '短链接', dataIndex: 'shortCode', key: 'shortCode', render: (code: string, record: any) => {
+      const fullUrl = record.shortUrl || `${window.location.origin}/t/${code}`;
+      return (
+        <div>
+          <Tag color="blue" style={{ cursor: 'pointer' }} onClick={() => { navigator.clipboard.writeText(fullUrl); message.success('已复制'); }}>{`/t/${code}`}</Tag>
+          <div style={{ fontSize: 12, color: '#999', marginTop: 2 }}>{fullUrl}</div>
+        </div>
+      );
+    }},
+    { title: '目标页面', dataIndex: 'targetUrl', key: 'targetUrl', ellipsis: true },
+    { title: '来源', dataIndex: 'utmSource', key: 'utmSource', render: (v: string) => v === 'page-builder' ? <Tag color="green">页面搭建</Tag> : v ? <Tag>{v}</Tag> : '-' },
+    { title: '点击', dataIndex: 'clickCount', key: 'clickCount', sorter: (a: any, b: any) => a.clickCount - b.clickCount, render: (v: number) => <Text strong style={{ color: v > 0 ? '#1677ff' : '#999' }}>{v}</Text> },
+    { title: '转化', dataIndex: 'leadCount', key: 'leadCount', render: (v: number) => <Text strong style={{ color: v > 0 ? '#52c41a' : '#999' }}>{v}</Text> },
     { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', render: (v: string) => new Date(v).toLocaleDateString() },
     { title: '操作', key: 'action', width: 150, render: (_: any, record: any) => (
       <Space>
@@ -317,6 +397,41 @@ function TrackingLinks() {
     )},
   ];
 
+  // 页面推广链接表格列
+  const pageLinkColumns = [
+    { title: '短链接', dataIndex: 'shortCode', key: 'shortCode', render: (code: string, record: any) => {
+      const fullUrl = record.shortUrl || `${window.location.origin}/t/${code}`;
+      return (
+        <div>
+          <Tag color="blue" style={{ cursor: 'pointer' }} onClick={() => { navigator.clipboard.writeText(fullUrl); message.success('已复制'); }}>{`/t/${code}`}</Tag>
+          <div style={{ fontSize: 12, color: '#999', marginTop: 2 }}>{fullUrl}</div>
+        </div>
+      );
+    }},
+    { title: '所属页面', dataIndex: 'pageTitle', key: 'pageTitle', render: (v: string, r: any) => <span>{v} <Text type="secondary">({r.siteName})</Text></span> },
+    { title: '目标地址', dataIndex: 'targetUrl', key: 'targetUrl', ellipsis: true },
+    { title: '点击', dataIndex: 'clickCount', key: 'clickCount', render: (v: number) => <Text strong style={{ color: v > 0 ? '#1677ff' : '#999' }}>{v}</Text> },
+    { title: '转化', dataIndex: 'leadCount', key: 'leadCount', render: (v: number) => <Text strong style={{ color: v > 0 ? '#52c41a' : '#999' }}>{v}</Text> },
+    { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', render: (v: string) => new Date(v).toLocaleDateString() },
+    { title: '操作', key: 'action', width: 150, render: (_: any, record: any) => (
+      <Space>
+        <Tooltip title="复制链接"><Button size="small" icon={<CopyOutlined />} onClick={() => copyPageLink(record)} /></Tooltip>
+        <Tooltip title="预览"><Button size="small" icon={<EyeOutlined />} onClick={() => window.open(record.shortUrl || `${window.location.origin}/t/${record.shortCode}`, '_blank')} /></Tooltip>
+        <Popconfirm title="确定删除此推广链接？" onConfirm={() => deletePageLink(record.id)}>
+          <Button size="small" danger icon={<DeleteOutlined />} />
+        </Popconfirm>
+      </Space>
+    )},
+  ];
+
+  // 按页面过滤推广链接
+  const filteredPageLinks = selectedPageId
+    ? pageLinks.filter(l => {
+        const page = pages.find(p => p.title === l.pageTitle);
+        return page?.id === selectedPageId;
+      })
+    : pageLinks;
+
   return (
     <div>
       <Row gutter={16} style={{ marginBottom: 24 }}>
@@ -325,8 +440,53 @@ function TrackingLinks() {
         <Col span={8}><Card><Statistic title="总转化数" value={stats.summary?.totalLeads || 0} prefix={<CheckCircleOutlined />} /></Card></Col>
       </Row>
 
+      {/* 页面搭建推广链接 */}
+      <Card
+        title={<span><LinkOutlined style={{ color: '#1677ff', marginRight: 8 }} />页面搭建推广链接 ({pageLinks.length})</span>}
+        style={{ marginBottom: 24 }}
+        extra={
+          <Space>
+            <Select
+              value={selectedPageId}
+              onChange={setSelectedPageId}
+              style={{ width: 200 }}
+              showSearch
+              optionFilterProp="children"
+              placeholder="选择页面"
+            >
+              {pages.map(p => (
+                <Select.Option key={p.id} value={p.id}>{p.title} ({p.siteName})</Select.Option>
+              ))}
+            </Select>
+            <Button type="primary" icon={<PlusOutlined />} onClick={handleGeneratePageLink} loading={generating} disabled={!selectedPageId}>
+              生成推广链接
+            </Button>
+          </Space>
+        }
+      >
+        <Table
+          dataSource={filteredPageLinks}
+          columns={pageLinkColumns}
+          rowKey="id"
+          loading={pageLinkLoading}
+          pagination={{ pageSize: 5 }}
+          locale={{ emptyText: '该页面暂无推广链接，点击"生成推广链接"创建' }}
+        />
+      </Card>
+
+      {/* 所有追踪链接 */}
       <Card extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>创建追踪链接</Button>}>
-        <Table dataSource={links} columns={columns} rowKey="id" pagination={{ pageSize: 10 }} />
+        <div style={{ marginBottom: 16 }}>
+          <Space>
+            <Text strong>筛选：</Text>
+            <Select value={filter} onChange={setFilter} style={{ width: 150 }}>
+              <Select.Option value="all">全部链接 ({links.length})</Select.Option>
+              <Select.Option value="page-builder">页面搭建 ({links.filter(l => l.utmSource === 'page-builder').length})</Select.Option>
+              <Select.Option value="manual">手动创建 ({links.filter(l => l.utmSource !== 'page-builder').length})</Select.Option>
+            </Select>
+          </Space>
+        </div>
+        <Table dataSource={filteredLinks} columns={columns} rowKey="id" pagination={{ pageSize: 10 }} />
       </Card>
 
       <Modal title="创建追踪链接" open={modalOpen} onCancel={() => setModalOpen(false)} onOk={() => form.submit()} confirmLoading={loading}>
@@ -753,8 +913,13 @@ function SeoTools() {
   const [editForm] = Form.useForm();
   const [aiLoading, setAiLoading] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState('');
+  // 页面SEO设置
+  const [pages, setPages] = useState<any[]>([]);
+  const [pageSeoLoading, setPageSeoLoading] = useState(false);
+  const [editPageSeo, setEditPageSeo] = useState<any>(null);
+  const [pageSeoForm] = Form.useForm();
 
-  useEffect(() => { loadAnalysis(); }, []);
+  useEffect(() => { loadAnalysis(); loadPages(); }, []);
 
   const loadAnalysis = async () => {
     setLoading(true);
@@ -763,6 +928,61 @@ function SeoTools() {
       if (res.code === 0) setAnalysis(res.data || []);
     } catch {}
     setLoading(false);
+  };
+
+  // 加载所有页面及其SEO信息
+  const loadPages = async () => {
+    setPageSeoLoading(true);
+    try {
+      const sitesRes: any = await cmsApi.getSites({ pageSize: '100' });
+      if (sitesRes.code === 0) {
+        const sites = Array.isArray(sitesRes.data) ? sitesRes.data : (sitesRes.data?.list || []);
+        const allPages: any[] = [];
+        for (const site of sites) {
+          const pageRes: any = await cmsApi.getPages(site.id);
+          if (pageRes.code === 0 && pageRes.data) {
+            allPages.push(...pageRes.data.map((p: any) => ({ ...p, siteName: site.name, siteId: site.id })));
+          }
+        }
+        setPages(allPages);
+      }
+    } catch {}
+    setPageSeoLoading(false);
+  };
+
+  // 打开页面SEO编辑
+  const handleEditPageSeo = (page: any) => {
+    pageSeoForm.setFieldsValue({
+      title: page.title,
+      slug: page.slug,
+      seoTitle: page.seoTitle || '',
+      seoDesc: page.seoDesc || '',
+      seoKeywords: page.seoKeywords || '',
+      status: page.status || 'draft',
+    });
+    setEditPageSeo(page);
+  };
+
+  // 保存页面SEO设置
+  const handleSavePageSeo = async (values: any) => {
+    if (!editPageSeo) return;
+    try {
+      const res: any = await cmsApi.updatePage(editPageSeo.id, {
+        seoTitle: values.seoTitle,
+        seoDesc: values.seoDesc,
+        seoKeywords: values.seoKeywords,
+        status: values.status,
+      });
+      if (res.code === 0) {
+        message.success('页面SEO设置已保存');
+        setEditPageSeo(null);
+        pageSeoForm.resetFields();
+        loadPages();
+        loadAnalysis();
+      } else {
+        message.error(res.message || '保存失败');
+      }
+    } catch { message.error('保存失败'); }
   };
 
   const getScoreColor = (score: number) => score >= 80 ? '#52c41a' : score >= 50 ? '#faad14' : '#ff4d4f';
@@ -911,6 +1131,30 @@ function SeoTools() {
         </Space>
       </div>
 
+      {/* 页面SEO设置 */}
+      <Card
+        title={<span><SearchOutlined style={{ color: '#1677ff', marginRight: 8 }} />页面SEO设置 ({pages.length})</span>}
+        style={{ marginBottom: 24 }}
+      >
+        <Table
+          dataSource={pages}
+          rowKey="id"
+          loading={pageSeoLoading}
+          pagination={{ pageSize: 5 }}
+          locale={{ emptyText: '暂无页面，请先在页面搭建中创建页面' }}
+          columns={[
+            { title: '页面标题', dataIndex: 'title', key: 'title', render: (v: string, r: any) => <span>{v} <Text type="secondary">({r.siteName})</Text></span> },
+            { title: '路径', dataIndex: 'slug', key: 'slug', render: (v: string) => <Tag>/p/{v}</Tag> },
+            { title: 'SEO标题', dataIndex: 'seoTitle', key: 'seoTitle', ellipsis: true, render: (v: string) => v ? <Text style={{ color: '#52c41a' }}>{v}</Text> : <Text type="secondary">未设置</Text> },
+            { title: 'SEO描述', dataIndex: 'seoDesc', key: 'seoDesc', ellipsis: true, render: (v: string) => v ? <Text style={{ color: '#52c41a' }}>{v}</Text> : <Text type="secondary">未设置</Text> },
+            { title: '状态', dataIndex: 'status', key: 'status', render: (v: string) => v === 'published' ? <Tag color="green">已发布</Tag> : <Tag color="default">草稿</Tag> },
+            { title: '操作', key: 'action', width: 100, render: (_: any, record: any) => (
+              <Button size="small" type="primary" icon={<EditOutlined />} onClick={() => handleEditPageSeo(record)}>SEO设置</Button>
+            )},
+          ]}
+        />
+      </Card>
+
       {/* 站点分析卡片 */}
       <Row gutter={[16, 16]}>
         {analysis.map((site: any) => (
@@ -1039,6 +1283,29 @@ function SeoTools() {
       {/* AI 分析结果 */}
       <Modal title={<span><RobotOutlined style={{ color: '#722ed1' }} /> AI SEO 智能分析建议</span>} open={!!aiSuggestion} onCancel={() => setAiSuggestion('')} footer={<Button onClick={() => setAiSuggestion('')}>关闭</Button>} width={700}>
         <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.8, fontSize: 14 }}>{aiSuggestion}</div>
+      </Modal>
+
+      {/* 编辑页面 SEO 信息 */}
+      <Modal title="页面SEO设置" open={!!editPageSeo} onCancel={() => { setEditPageSeo(null); pageSeoForm.resetFields(); }} onOk={() => pageSeoForm.submit()} width={600}>
+        {editPageSeo && (
+          <Alert
+            message={`页面：${editPageSeo.title} | 路径：/p/${editPageSeo.slug}`}
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+          />
+        )}
+        <Form form={pageSeoForm} onFinish={handleSavePageSeo} layout="vertical">
+          <Form.Item name="seoTitle" label="SEO 标题" extra="建议 30-60 字符，显示在搜索结果中">{editPageSeo && <Input.TextArea rows={2} placeholder="输入SEO标题" />}</Form.Item>
+          <Form.Item name="seoDesc" label="SEO 描述" extra="建议 120-160 字符，显示在搜索结果标题下方">{editPageSeo && <Input.TextArea rows={3} placeholder="输入SEO描述" />}</Form.Item>
+          <Form.Item name="seoKeywords" label="SEO 关键词" extra="多个关键词用逗号分隔">{editPageSeo && <Input placeholder="关键词1,关键词2,关键词3" />}</Form.Item>
+          <Form.Item name="status" label="发布状态">
+            <Select>
+              <Select.Option value="draft">草稿</Select.Option>
+              <Select.Option value="published">发布</Select.Option>
+            </Select>
+          </Form.Item>
+        </Form>
       </Modal>
 
       {/* 编辑站点 SEO 信息 */}
