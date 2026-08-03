@@ -66,14 +66,19 @@ app.use('/api/v1/ai', aiToolsRoutes);
 // 静态文件服务 - 上传目录
 app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')));
 
-// 短链跳转（公开接口）
+// 短链跳转（公开接口）- 支持 JSON 解析和直接跳转
 app.get('/t/:shortCode', async (req, res) => {
   try {
     const prisma = (await import('./common/prisma')).default;
     const link = await prisma.trackingLink.findUnique({ where: { shortCode: req.params.shortCode } });
     if (link) {
       await prisma.trackingLink.update({ where: { id: link.id }, data: { clickCount: { increment: 1 } } });
-      res.redirect(link.targetUrl);
+      // 前端请求时返回 JSON，直接访问时跳转
+      if (req.headers.accept?.includes('application/json') || req.query.resolve === 'true') {
+        res.json({ code: 0, data: { targetUrl: link.targetUrl, shortCode: link.shortCode } });
+      } else {
+        res.redirect(link.targetUrl);
+      }
     } else {
       res.status(404).send('链接不存在');
     }

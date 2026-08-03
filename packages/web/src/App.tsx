@@ -20,6 +20,7 @@ import Mall from './pages/mall/Mall';
 import Promotion from './pages/promotion/Promotion';
 import Settings from './pages/settings/Settings';
 import PageViewer from './pages/PageViewer';
+import ShortLinkRedirect from './pages/ShortLinkRedirect';
 import { adminRoutes } from './routes/adminRoutes';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -51,6 +52,8 @@ export default function App() {
           </Route>
           {/* 公开页面查看路由（无需登录） */}
           <Route path="/p/:slug" element={<PageViewer />} />
+          {/* 短链跳转路由（无需登录） */}
+          <Route path="/t/:shortCode" element={<ShortLinkRedirect />} />
           {/* 后端管理路由 */}
           {adminRoutes.map((route, index) => (
             <Route key={index} path={route.path} element={route.element}>
