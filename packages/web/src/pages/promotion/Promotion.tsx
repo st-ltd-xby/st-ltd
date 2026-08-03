@@ -903,6 +903,10 @@ function SeoTools() {
   const [pageSeoLoading, setPageSeoLoading] = useState(false);
   const [editPageSeo, setEditPageSeo] = useState<any>(null);
   const [pageSeoForm] = Form.useForm();
+  const [pageAnalysis, setPageAnalysis] = useState<any[]>([]);
+  const [pageFixing, setPageFixing] = useState<string | null>(null);
+  const [pageAiLoading, setPageAiLoading] = useState(false);
+  const [pageAiSuggestion, setPageAiSuggestion] = useState('');
 
   useEffect(() => { loadAnalysis(); loadPages(); }, []);
 
