@@ -225,6 +225,165 @@ router.post('/pages/:id/generate-link', async (req: Request, res: Response) => {
   }
 });
 
+// 页面 SEO 分析
+router.get('/pages/:id/seo-analysis', async (req: Request, res: Response) => {
+  try {
+    const pageId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const page = await prisma.page.findFirst({
+      where: { id: pageId, tenantId: req.user!.tenantId },
+      include: { site: true },
+    });
+    if (!page) return notFound(res, '页面不存在');
+
+    const checks: any[] = [];
+    let score = 100;
+
+    const addCheck = (category: string, passed: boolean, issue: string, fix: string, impact: string, currentValue?: string) => {
+      const displayFix = passed && currentValue ? `当前值: ${currentValue}` : fix;
+      checks.push({ category, passed, issue, fix: displayFix, impact });
+      if (!passed) score -= impact === 'high' ? 20 : impact === 'medium' ? 10 : 5;
+    };
+
+    // 基础 SEO 检查
+    addCheck('基础', !!page.seoTitle, '缺少 SEO 标题', '为页面设置 SEO 标题（30-60字符）', 'high', page.seoTitle || undefined);
+    addCheck('基础', !!page.seoDesc, '缺少 SEO 描述', '为页面设置 SEO 描述（120-160字符）', 'high', page.seoDesc || undefined);
+    addCheck('基础', !!page.seoKeywords, '缺少关键词', '设置 3-5 个核心关键词', 'medium', page.seoKeywords || undefined);
+    addCheck('基础', page.status === 'published', '页面未发布', '将页面设置为发布状态', 'high');
+
+    // 长度检查
+    if (page.seoTitle) {
+      addCheck('优化', page.seoTitle.length <= 60, `SEO 标题过长（${page.seoTitle.length}字符）`, '缩短至 60 字符以内', 'medium', page.seoTitle);
+      addCheck('优化', page.seoTitle.length >= 10, 'SEO 标题过短', '标题至少 10 个字符', 'low', page.seoTitle);
+    }
+    if (page.seoDesc) {
+      addCheck('优化', page.seoDesc.length <= 160, `SEO 描述过长（${page.seoDesc.length}字符）`, '缩短至 160 字符以内', 'medium', page.seoDesc);
+      addCheck('优化', page.seoDesc.length >= 50, 'SEO 描述过短', '描述至少 50 个字符', 'low', page.seoDesc);
+    }
+
+    // 内容检查
+    const contentLength = page.content ? page.content.length : 0;
+    addCheck('内容', contentLength > 300, '页面内容过少', '建议页面内容不少于 300 字符', 'medium');
+
+    score = Math.max(0, Math.min(100, score));
+
+    success(res, {
+      pageId: page.id,
+      pageTitle: page.title,
+      path: `/p/${page.slug}`,
+      score,
+      checks,
+      issues: checks.filter(c => !c.passed),
+      passed: checks.filter(c => c.passed),
+      status: page.status,
+      seoTitle: page.seoTitle,
+      seoDesc: page.seoDesc,
+      seoKeywords: page.seoKeywords,
+    });
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 一键修复页面 SEO 问题
+router.post('/pages/:id/seo-fix', async (req: Request, res: Response) => {
+  try {
+    const pageId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const page = await prisma.page.findFirst({
+      where: { id: pageId, tenantId: req.user!.tenantId },
+      include: { site: true },
+    });
+    if (!page) return notFound(res, '页面不存在');
+
+    let fixed = 0;
+    const details: string[] = [];
+    const updateData: any = {};
+
+    // 1. 修复 SEO 标题
+    if (!page.seoTitle || page.seoTitle.length < 10) {
+      const title = page.seoTitle && page.seoTitle.length >= 10 ? page.seoTitle : `${page.title} - ${page.site?.name || '页面'}`;
+      updateData.seoTitle = title;
+      fixed++;
+      details.push('SEO标题');
+    }
+
+    // 2. 修复 SEO 描述
+    if (!page.seoDesc || page.seoDesc.length < 50) {
+      const desc = page.seoDesc && page.seoDesc.length >= 50 ? page.seoDesc : `${page.title}页面，了解详细信息。`;
+      updateData.seoDesc = desc;
+      fixed++;
+      details.push('SEO描述');
+    }
+
+    // 3. 修复关键词
+    if (!page.seoKeywords) {
+      updateData.seoKeywords = `${page.title},${page.site?.name || '页面'},详情`;
+      fixed++;
+      details.push('关键词');
+    }
+
+    // 4. 发布页面
+    if (page.status === 'draft') {
+      updateData.status = 'published';
+      updateData.publishedAt = new Date();
+      fixed++;
+      details.push('发布页面');
+    }
+
+    if (Object.keys(updateData).length > 0) {
+      await prisma.page.update({
+        where: { id: pageId },
+        data: updateData,
+      });
+    }
+
+    const msg = fixed > 0
+      ? `已修复 ${fixed} 项：${details.join('、')}`
+      : '所有可自动修复的问题已处理完毕';
+
+    success(res, { fixed, details }, msg);
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// AI 分析页面 SEO
+router.post('/pages/:id/ai-seo', async (req: Request, res: Response) => {
+  try {
+    const pageId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const page = await prisma.page.findFirst({
+      where: { id: pageId, tenantId: req.user!.tenantId },
+      include: { site: true },
+    });
+    if (!page) return notFound(res, '页面不存在');
+
+    // 模拟 AI 分析（在实际实现中这里会调用 AI API）
+    const suggestion = `
+## ${page.title} 页面 SEO 优化建议
+
+### 问题诊断
+- ${!page.seoTitle ? '• 缺少 SEO 标题，影响搜索引擎识别' : ''}
+- ${!page.seoDesc ? '• 缺少 SEO 描述，降低点击率' : ''}
+- ${page.status === 'draft' ? '• 页面未发布，无法被搜索引擎抓取' : ''}
+
+### 优化建议
+- ${page.seoTitle ? '• SEO 标题已设置，继续保持' : '• 设置吸引人的 SEO 标题，控制在 30-60 字符'}
+- ${page.seoDesc ? '• SEO 描述已设置，继续保持' : '• 撰写有吸引力的 SEO 描述，突出页面价值'}
+- ${page.seoKeywords ? '• 关键词已设置，继续保持' : '• 添加 3-5 个核心关键词，提升搜索匹配度'}
+- ${page.status === 'published' ? '• 页面已发布，状态良好' : '• 将页面设为发布状态，使其可被访问'}
+
+### 提升策略
+- 增加页面内容丰富度，建议不少于 300 字符
+- 优化页面加载速度
+- 添加内部链接提高页面权重
+- 定期更新内容保持活跃度
+    `;
+
+    success(res, { suggestion, score: page.seoTitle && page.seoDesc ? 75 : 45 });
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
 // 获取页面的推广链接列表
 router.get('/pages/:id/links', async (req: Request, res: Response) => {
   try {

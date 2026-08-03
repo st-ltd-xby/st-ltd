@@ -63,6 +63,10 @@ export const cmsApi = {
   // 页面推广链接
   generatePageLink: (pageId: string) => api.post(`/cms/pages/${pageId}/generate-link`),
   getPageLinks: (pageId: string) => api.get(`/cms/pages/${pageId}/links`),
+  // 页面 SEO
+  getPageSeoAnalysis: (pageId: string) => api.get(`/cms/pages/${pageId}/seo-analysis`),
+  fixPageSeo: (pageId: string) => api.post(`/cms/pages/${pageId}/seo-fix`),
+  aiAnalyzePageSeo: (pageId: string) => api.post(`/cms/pages/${pageId}/ai-seo`),
 };
 
 // SCRM
