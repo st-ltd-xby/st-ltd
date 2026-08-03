@@ -19,7 +19,10 @@ export default function Promotion() {
   return (
     <div>
       <Title level={4}>推广工具</Title>
-      <Tabs defaultActiveKey="tracking" type="card" size="large">
+      <Tabs defaultActiveKey="pagePromo" type="card" size="large">
+        <TabPane tab={<span><LinkOutlined /> 页面推广</span>} key="pagePromo">
+          <PagePromotion />
+        </TabPane>
         <TabPane tab={<span><LinkOutlined /> 追踪链接</span>} key="tracking">
           <TrackingLinks />
         </TabPane>
@@ -33,6 +36,149 @@ export default function Promotion() {
           <SeoTools />
         </TabPane>
       </Tabs>
+    </div>
+  );
+}
+
+// ============================================
+// 页面推广链接（从页面搭建生成的推广链接）
+// ============================================
+function PagePromotion() {
+  const [pages, setPages] = useState<any[]>([]);
+  const [selectedPageId, setSelectedPageId] = useState<string>('');
+  const [links, setLinks] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [generating, setGenerating] = useState(false);
+
+  useEffect(() => { loadPages(); }, []);
+
+  const loadPages = async () => {
+    try {
+      const res: any = await cmsApi.getSites({ pageSize: '100' });
+      if (res.code === 0) {
+        const sites = Array.isArray(res.data) ? res.data : (res.data?.list || []);
+        // 加载所有页面
+        const allPages: any[] = [];
+        for (const site of sites) {
+          const pageRes: any = await cmsApi.getPages(site.id);
+          if (pageRes.code === 0 && pageRes.data) {
+            allPages.push(...pageRes.data.map((p: any) => ({ ...p, siteName: site.name })));
+          }
+        }
+        setPages(allPages);
+        if (allPages.length > 0) {
+          setSelectedPageId(allPages[0].id);
+          fetchLinks(allPages[0].id);
+        }
+      }
+    } catch { /* ignore */ }
+  };
+
+  const fetchLinks = async (pageId: string) => {
+    setLoading(true);
+    try {
+      const res: any = await cmsApi.getPageLinks(pageId);
+      if (res.code === 0) {
+        setLinks(res.data || []);
+      }
+    } catch { /* ignore */ }
+    setLoading(false);
+  };
+
+  const handlePageChange = (pageId: string) => {
+    setSelectedPageId(pageId);
+    fetchLinks(pageId);
+  };
+
+  const handleGenerate = async () => {
+    if (!selectedPageId) return;
+    setGenerating(true);
+    try {
+      const res: any = await cmsApi.generatePageLink(selectedPageId);
+      if (res.code === 0) {
+        message.success('推广链接生成成功');
+        fetchLinks(selectedPageId);
+      }
+    } catch { message.error('生成失败'); }
+    setGenerating(false);
+  };
+
+  const copyLink = (link: any) => {
+    const url = link.shortUrl || `${window.location.origin}/t/${link.shortCode}`;
+    navigator.clipboard.writeText(url);
+    message.success('推广链接已复制，可用于推送');
+  };
+
+  const copyAllLinks = () => {
+    const allUrls = links.map(l => l.shortUrl || `${window.location.origin}/t/${l.shortCode}`).join('\n');
+    navigator.clipboard.writeText(allUrls);
+    message.success(`已复制全部 ${links.length} 个链接`);
+  };
+
+  const columns = [
+    { title: '短链接', dataIndex: 'shortCode', key: 'shortCode', render: (code: string) => (
+      <Tag color="blue" style={{ cursor: 'pointer' }} onClick={() => navigator.clipboard.writeText(`${window.location.origin}/t/${code}`)}>{`/t/${code}`}</Tag>
+    )},
+    { title: '目标地址', dataIndex: 'targetUrl', key: 'targetUrl', ellipsis: true },
+    { title: '来源', dataIndex: 'utmSource', key: 'utmSource', render: (v: string) => v ? <Tag>{v}</Tag> : '-' },
+    { title: '点击数', dataIndex: 'clickCount', key: 'clickCount', sorter: (a: any, b: any) => a.clickCount - b.clickCount },
+    { title: '转化数', dataIndex: 'leadCount', key: 'leadCount' },
+    { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', render: (v: string) => new Date(v).toLocaleDateString() },
+    { title: '操作', key: 'action', width: 100, render: (_: any, record: any) => (
+      <Button size="small" icon={<CopyOutlined />} onClick={() => copyLink(record)}>复制</Button>
+    )},
+  ];
+
+  const currentPage = pages.find(p => p.id === selectedPageId);
+
+  return (
+    <div>
+      <Alert
+        message="页面推广链接说明"
+        description="在页面搭建中保存页面后会自动生成推广链接，也可以手动生成多个链接。这些链接可用于微信、微博、短信等渠道推送，用户点击后会被追踪统计。"
+        type="info"
+        showIcon
+        style={{ marginBottom: 16 }}
+      />
+
+      <Card style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+          <Space>
+            <Text strong>选择页面：</Text>
+            <Select
+              value={selectedPageId}
+              onChange={handlePageChange}
+              style={{ width: 300 }}
+              showSearch
+              optionFilterProp="children"
+            >
+              {pages.map(p => (
+                <Select.Option key={p.id} value={p.id}>{p.title} ({p.siteName})</Select.Option>
+              ))}
+            </Select>
+          </Space>
+          <Space>
+            <Button icon={<PlusOutlined />} type="primary" onClick={handleGenerate} loading={generating} disabled={!selectedPageId}>生成新链接</Button>
+            {links.length > 1 && <Button icon={<CopyOutlined />} onClick={copyAllLinks}>复制全部</Button>}
+          </Space>
+        </div>
+        {currentPage && (
+          <div style={{ marginTop: 12 }}>
+            <Text type="secondary">页面地址：/p/{currentPage.slug} | 状态：{currentPage.status === 'published' ? '已发布' : '草稿'}</Text>
+          </div>
+        )}
+      </Card>
+
+      <Card title={`推广链接列表 (${links.length})`}>
+        <Table
+          dataSource={links}
+          columns={columns}
+          rowKey="id"
+          loading={loading}
+          pagination={{ pageSize: 10 }}
+          locale={{ emptyText: '该页面还没有推广链接，点击“生成新链接”创建' }}
+        />
+      </Card>
     </div>
   );
 }

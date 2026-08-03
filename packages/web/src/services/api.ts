@@ -58,6 +58,9 @@ export const cmsApi = {
   createForm: (siteId: string, data: any) => api.post(`/cms/sites/${siteId}/forms`, data),
   getFormSubmissions: (id: string, params?: any) => api.get(`/cms/forms/${id}/submissions`, { params }),
   getMedia: (siteId: string, params?: any) => api.get(`/cms/sites/${siteId}/media`, { params }),
+  // 页面推广链接
+  generatePageLink: (pageId: string) => api.post(`/cms/pages/${pageId}/generate-link`),
+  getPageLinks: (pageId: string) => api.get(`/cms/pages/${pageId}/links`),
 };
 
 // SCRM

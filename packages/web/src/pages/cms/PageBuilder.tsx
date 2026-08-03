@@ -7,6 +7,7 @@ import {
   FolderOutlined, FileOutlined, ReloadOutlined, UploadOutlined, LinkOutlined,
 } from '@ant-design/icons';
 import { cmsApi } from '../../services/api';
+import { API_BASE_URL } from '../../config/api';
 
 const { Title, Text } = Typography;
 const { Sider, Content } = Layout;
@@ -287,6 +288,9 @@ export default function PageBuilder() {
   const [loading, setLoading] = useState(false);
   const [saveForm] = Form.useForm();
   const [pageUrl, setPageUrl] = useState<string>('');
+  const [promotionModal, setPromotionModal] = useState(false);
+  const [promotionLinks, setPromotionLinks] = useState<any[]>([]);
+  const [generating, setGenerating] = useState(false);
 
   const selectedComp = components.find(c => c.id === selectedId) || null;
 
@@ -439,13 +443,18 @@ export default function PageBuilder() {
       console.log('保存结果:', res);
       if (res.code === 0) {
         message.success(currentPageId ? '页面更新成功' : '页面创建成功');
-        if (res.data?.id) setCurrentPageId(res.data.id);
+        const savedPageId = res.data?.id || currentPageId;
+        if (savedPageId) setCurrentPageId(savedPageId);
         // 生成二级链接
         const slug = values.slug || values.title.toLowerCase().replace(/\s+/g, '-');
         const url = `/p/${slug}`;
         setPageUrl(url);
         setSaveModal(false);
         loadPages(selectedSiteId);
+        // 自动生成推广链接
+        if (savedPageId) {
+          await generatePromotionLink(savedPageId);
+        }
       } else {
         message.error(res.message || '保存失败');
       }
@@ -455,6 +464,51 @@ export default function PageBuilder() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // 生成推广链接
+  const generatePromotionLink = async (pageId: string) => {
+    setGenerating(true);
+    try {
+      const res: any = await cmsApi.generatePageLink(pageId);
+      if (res.code === 0) {
+        setPromotionLinks([res.data]);
+        setPromotionModal(true);
+      }
+    } catch { /* ignore */ }
+    setGenerating(false);
+  };
+
+  // 获取已有推广链接
+  const fetchPromotionLinks = async (pageId: string) => {
+    try {
+      const res: any = await cmsApi.getPageLinks(pageId);
+      if (res.code === 0 && res.data?.length > 0) {
+        setPromotionLinks(res.data);
+        setPromotionModal(true);
+      }
+    } catch { /* ignore */ }
+  };
+
+  // 再次生成新链接
+  const handleGenerateNewLink = async () => {
+    if (!currentPageId) return;
+    setGenerating(true);
+    try {
+      const res: any = await cmsApi.generatePageLink(currentPageId);
+      if (res.code === 0) {
+        message.success('新推广链接已生成');
+        setPromotionLinks(prev => [res.data, ...prev]);
+      }
+    } catch { message.error('生成失败'); }
+    setGenerating(false);
+  };
+
+  // 复制推广链接
+  const copyPromotionLink = (link: any) => {
+    const url = link.shortUrl || `${window.location.origin}/t/${link.shortCode}`;
+    navigator.clipboard.writeText(url);
+    message.success('推广链接已复制');
   };
 
   // 打开保存弹窗（预填当前页面信息）
@@ -546,6 +600,7 @@ export default function PageBuilder() {
           <Button icon={<FolderOutlined />} onClick={() => setPageListVisible(true)}>页面管理</Button>
           <Button icon={<PlusOutlined />} onClick={newPage}>新建页面</Button>
           <Button icon={<EyeOutlined />} onClick={() => setPreviewMode(true)} disabled={!components.length}>预览</Button>
+          <Button icon={<LinkOutlined />} onClick={() => currentPageId ? fetchPromotionLinks(currentPageId) : message.warning('请先保存页面')} disabled={!currentPageId}>推广链接</Button>
           <Button type="primary" icon={<SaveOutlined />} onClick={openSaveModal} disabled={!components.length}>保存页面</Button>
         </Space>
       </div>
@@ -614,6 +669,53 @@ export default function PageBuilder() {
 
       {/* 页面管理弹窗 */}
       <PageListPanel />
+
+      {/* 推广链接弹窗 */}
+      <Modal
+        title="推广链接 - 用于推送"
+        open={promotionModal}
+        onCancel={() => setPromotionModal(false)}
+        footer={[
+          <Button key="close" onClick={() => setPromotionModal(false)}>关闭</Button>,
+          <Button key="generate" type="primary" icon={<LinkOutlined />} onClick={handleGenerateNewLink} loading={generating}>生成新链接</Button>,
+        ]}
+        width={600}
+      >
+        <Alert message="以下链接可用于企业推广推送，用户点击后会被追踪统计" type="info" showIcon style={{ marginBottom: 16 }} />
+        <List
+          dataSource={promotionLinks}
+          renderItem={(link: any) => {
+            const fullUrl = link.shortUrl || `${window.location.origin}/t/${link.shortCode}`;
+            return (
+              <List.Item
+                actions={[
+                  <Button size="small" icon={<CopyOutlined />} onClick={() => copyPromotionLink(link)}>复制</Button>,
+                ]}
+              >
+                <List.Item.Meta
+                  title={<Tag color="blue">{link.shortCode}</Tag>}
+                  description={
+                    <div>
+                      <div style={{ marginBottom: 4 }}>
+                        <Text strong>短链接：</Text>
+                        <code style={{ background: '#f5f5f5', padding: '2px 6px', borderRadius: 4, fontSize: 13 }}>{fullUrl}</code>
+                      </div>
+                      <div>
+                        <Text strong>目标：</Text>
+                        <Text type="secondary" ellipsis style={{ maxWidth: 300 }}>{link.targetUrl}</Text>
+                      </div>
+                      <div style={{ marginTop: 4 }}>
+                        <Text type="secondary" style={{ fontSize: 12 }}>点击: {link.clickCount || 0} | 转化: {link.leadCount || 0}</Text>
+                      </div>
+                    </div>
+                  }
+                />
+              </List.Item>
+            );
+          }}
+        />
+        {promotionLinks.length === 0 && <div style={{ textAlign: 'center', padding: 24, color: '#999' }}>暂无推广链接</div>}
+      </Modal>
 
       {/* 保存弹窗 */}
       <Modal title={currentPageId ? '更新页面' : '保存新页面'} open={saveModal} onCancel={() => { setSaveModal(false); setPageUrl(''); }} onOk={() => saveForm.submit()} destroyOnClose confirmLoading={loading}>
