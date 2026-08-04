@@ -4,7 +4,6 @@ dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
 import express, { Application } from 'express';
 import cors from 'cors';
-import rateLimit from 'express-rate-limit';
 import swaggerUi from 'swagger-ui-express';
 import { errorHandler, notFoundHandler } from './middleware/error';
 import swaggerDocument from './common/swagger';
@@ -32,16 +31,10 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// 健康检查（必须在限流之前，否则Railway健康检查会被429）
+// 健康检查（必须在最前面）
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '1.0.0', aiTools: 'registered' });
 });
-
-app.use('/api/', rateLimit({
-  windowMs: 1 * 60 * 1000,
-  max: 1000,
-  message: { code: 429, message: 'Too many requests', data: null },
-}));
 
 app.get('/', (req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
