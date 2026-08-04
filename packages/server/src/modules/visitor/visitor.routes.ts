@@ -23,6 +23,7 @@ router.post('/visitor/track', async (req: Request, res: Response) => {
       screen: screenSize,
       viewport,
       lang,
+      promoCode,
     } = req.body;
 
     if (!tenantId || !visitorId) {
@@ -35,7 +36,6 @@ router.post('/visitor/track', async (req: Request, res: Response) => {
     });
 
     if (!visitor) {
-      // 首次访问，创建新访客
       visitor = await prisma.visitor.create({
         data: {
           tenantId,
@@ -44,15 +44,14 @@ router.post('/visitor/track', async (req: Request, res: Response) => {
           ua: ua || '',
           referrer: data?.referrer || '',
           landingPage: url || '',
-          utmSource: data?.utm?.utm_source || '',
-          utmMedium: data?.utm?.utm_medium || '',
+          utmSource: data?.utm?.utm_source || (promoCode ? 'promotion' : ''),
+          utmMedium: data?.utm?.utm_medium || (promoCode ? 'short-link' : ''),
           utmCampaign: data?.utm?.utm_campaign || '',
           visitCount: 1,
           lastVisitAt: new Date(),
         },
       });
     } else {
-      // 回访，更新 lastVisitAt 和 visitCount
       await prisma.visitor.update({
         where: { id: visitor.id },
         data: {
@@ -83,9 +82,41 @@ router.post('/visitor/track', async (req: Request, res: Response) => {
       });
     }
 
+    // 如果是通过推广短链来的，自动创建线索
+    if (promoCode) {
+      const trackingLink = await prisma.trackingLink.findUnique({ where: { shortCode: promoCode } });
+      if (trackingLink) {
+        // 从目标URL提取页面slug，获取tenantId
+        const slugMatch = trackingLink.targetUrl.match(/\/p\/(.+)$/);
+        let leadTenantId = tenantId;
+        if (slugMatch) {
+          const page = await prisma.page.findFirst({ where: { slug: decodeURIComponent(slugMatch[1]) } });
+          if (page) leadTenantId = page.tenantId;
+        }
+        // 创建线索（来源：推广链接）
+        await prisma.lead.create({
+          data: {
+            tenantId: leadTenantId,
+            name: `推广访客-${promoCode}`,
+            source: 'promotion',
+            sourceId: trackingLink.id,
+            visitorId: visitor.id,
+            status: 'new',
+            priority: 'medium',
+            tags: '',
+            note: `通过推广短链 ${promoCode} 访问，目标: ${trackingLink.targetUrl}`,
+          },
+        });
+        // 更新追踪链接的线索计数
+        await prisma.trackingLink.update({
+          where: { id: trackingLink.id },
+          data: { leadCount: { increment: 1 } },
+        });
+      }
+    }
+
     success(res, { visitorId: visitor.id });
   } catch (error: any) {
-    // 追踪失败不影响用户体验，静默记录
     console.error('[Visitor Track Error]', error.message);
     fail(res, error.message);
   }

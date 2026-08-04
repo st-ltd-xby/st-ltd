@@ -71,11 +71,13 @@ app.get('/t/:shortCode', async (req, res) => {
     const link = await prisma.trackingLink.findUnique({ where: { shortCode: req.params.shortCode } });
     if (link) {
       await prisma.trackingLink.update({ where: { id: link.id }, data: { clickCount: { increment: 1 } } });
-      // 前端请求时返回 JSON，直接访问时跳转
+      // 在目标URL上追加 promo 追踪参数
+      const separator = link.targetUrl.includes('?') ? '&' : '?';
+      const redirectUrl = `${link.targetUrl}${separator}promo=${link.shortCode}`;
       if (req.headers.accept?.includes('application/json') || req.query.resolve === 'true') {
-        res.json({ code: 0, data: { targetUrl: link.targetUrl, shortCode: link.shortCode } });
+        res.json({ code: 0, data: { targetUrl: redirectUrl, shortCode: link.shortCode } });
       } else {
-        res.redirect(link.targetUrl);
+        res.redirect(redirectUrl);
       }
     } else {
       res.status(404).send('链接不存在');

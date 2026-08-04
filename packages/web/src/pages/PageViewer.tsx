@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Typography, Spin, Result, Button } from 'antd';
 import { ArrowLeftOutlined, PictureOutlined, PhoneOutlined, MailOutlined, UserOutlined } from '@ant-design/icons';
 import axios from 'axios';
@@ -122,9 +122,16 @@ function RenderPageComponent({ comp }: { comp: any }) {
 export default function PageViewer() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [page, setPage] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+
+  // 生成访客指纹（基于浏览器特征）
+  const getVisitorId = () => {
+    const nav = navigator as any;
+    return btoa(`${nav.userAgent}${nav.language}${screen.width}x${screen.height}`).replace(/[^a-zA-Z0-9]/g, '').substring(0, 32);
+  };
 
   useEffect(() => {
     const fetchPage = async () => {
@@ -132,9 +139,33 @@ export default function PageViewer() {
       try {
         const res = await axios.get(`${API_BASE_URL}/api/v1/cms/pages/${slug}/public`);
         if (res.data.code === 0) {
-          setPage(res.data.data);
-          // 设置页面标题
-          document.title = res.data.data.seoTitle || res.data.data.title || 'ST-LTD';
+          const pageData = res.data.data;
+          setPage(pageData);
+          document.title = pageData.seoTitle || pageData.title || 'ST-LTD';
+
+          // 检测是否通过推广短链访问
+          const promoCode = searchParams.get('promo');
+          if (promoCode) {
+            const visitorId = getVisitorId();
+            // 发送追踪请求（含 promoCode），后端自动创建线索
+            fetch(`${API_BASE_URL}/api/v1/visitor/track`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                tenantId: pageData.tenantId || 'test-tenant-001',
+                visitorId,
+                type: 'pageview',
+                url: window.location.href,
+                title: pageData.title,
+                timestamp: Date.now(),
+                ua: navigator.userAgent,
+                screen: { width: screen.width, height: screen.height },
+                viewport: { width: window.innerWidth, height: window.innerHeight },
+                lang: navigator.language,
+                promoCode,
+              }),
+            }).catch(() => {}); // 追踪失败不影响页面
+          }
         } else {
           setError(true);
         }
