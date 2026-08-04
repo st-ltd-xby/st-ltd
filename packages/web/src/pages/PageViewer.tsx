@@ -91,7 +91,7 @@ export default function PageViewer() {
     const fetchPage = async () => {
       if (!slug) return;
       try {
-        const res = await axios.get(`/api/v1/cms/pages/${slug}/public`);
+        const res = await axios.get(`${API_BASE_URL}/api/v1/cms/pages/${slug}/public`);
         if (res.data.code === 0) {
           setPage(res.data.data);
           // 设置页面标题

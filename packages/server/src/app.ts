@@ -100,17 +100,12 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 async function start() {
-  await autoSeed();
+  // 先启动服务器，让健康检查立即可用
   app.listen(PORT, () => {
-    console.log('');
-    console.log('  �T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�[');
-    console.log('  �U   LTD Ӫ����Ŧϵͳ API Server              �U');
-    console.log('  �U   http://localhost:' + PORT + '                  �U');
-    console.log('  �U   API �ĵ�: http://localhost:' + PORT + '/api-docs     �U');
-    console.log('  �U   ����: ' + (process.env.NODE_ENV || 'development') + '                          �U');
-    console.log('  �^�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�a');
-    console.log('');
+    console.log('LTD API Server started on port ' + PORT);
   });
+  // 后台执行数据初始化（不阻塞启动）
+  autoSeed().catch(e => console.error('autoSeed error:', e));
 }
 
 // 仅在本地开发环境自动启动（Vercel / 阿里云 FC 等 Serverless 环境不启动）
