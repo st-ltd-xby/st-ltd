@@ -25,7 +25,7 @@ export async function autoSeed() {
     });
 
     // 创建管理员
-    const adminPassword = await bcrypt.hash('admin', 10); // 修改密码为admin
+    const adminPassword = await bcrypt.hash('admin123', 10);
     await prisma.user.create({
       data: {
         id: 'test-admin-001',
@@ -40,12 +40,12 @@ export async function autoSeed() {
     });
 
     // 创建后端管理员账号
-    const backendAdminPassword = await bcrypt.hash('admin', 10);
+    const backendAdminPassword = await bcrypt.hash('admin123', 10);
     await prisma.user.create({
       data: {
         id: 'backend-admin-001',
         tenantId: 'test-tenant-001',
-        email: 'admin', // 使用admin作为登录名
+        email: 'backend@ltd.com', // 使用合法邮箱格式
         password: backendAdminPassword,
         name: '后端管理员',
         phone: '13900139000',
@@ -78,6 +78,25 @@ export async function autoSeed() {
         type: 'pc',
         domain: 'https://example.com',
         status: 'published',
+      },
+    });
+
+    // 创建测试页面
+    await prisma.page.create({
+      data: {
+        id: 'test-page-001',
+        tenantId: 'test-tenant-001',
+        siteId: 'test-site-001',
+        title: '辽宁高新安防科技有限公司',
+        slug: '辽宁高新安防科技有限公司',
+        content: JSON.stringify([
+          { id: 'h1', type: 'heading', props: { level: 1, content: '辽宁高新安防科技有限公司', align: 'center', color: '#1a1a1a' } },
+          { id: 'p1', type: 'text', props: { content: '欢迎访问辽宁高新安防科技有限公司官方网站', align: 'center', color: '#666', fontSize: '16px' } },
+        ]),
+        seoTitle: '辽宁高新安防科技有限公司',
+        seoDesc: '辽宁高新安防科技有限公司官方网站',
+        status: 'published',
+        publishedAt: new Date(),
       },
     });
 

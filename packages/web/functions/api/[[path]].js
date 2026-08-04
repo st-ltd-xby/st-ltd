@@ -1,6 +1,19 @@
 export async function onRequest(context) {
   const { request } = context;
   const url = new URL(request.url);
+
+  // Debug: 返回请求信息确认函数被触发
+  if (url.pathname.includes('/debug-test')) {
+    return new Response(JSON.stringify({
+      triggered: true,
+      pathname: url.pathname,
+      backend: 'https://st-ltd-api-production.up.railway.app' + url.pathname + url.search,
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   const backendUrl = 'https://st-ltd-api-production.up.railway.app' + url.pathname + url.search;
 
   if (request.method === 'OPTIONS') {
@@ -33,7 +46,7 @@ export async function onRequest(context) {
 
     const responseHeaders = new Headers(response.headers);
     responseHeaders.set('Access-Control-Allow-Origin', '*');
-    responseHeaders.set('X-Proxy', 'cf-pages');
+    responseHeaders.set('X-Proxy', 'cf-pages-function');
 
     return new Response(response.body, {
       status: response.status,
@@ -41,9 +54,9 @@ export async function onRequest(context) {
       headers: responseHeaders,
     });
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message, url: backendUrl }), {
+    return new Response(JSON.stringify({ error: 'Proxy error: ' + err.message, url: backendUrl }), {
       status: 502,
-      headers: { 'Content-Type': 'application/json', 'X-Proxy': 'cf-pages' },
+      headers: { 'Content-Type': 'application/json', 'X-Proxy': 'cf-pages-function' },
     });
   }
 }

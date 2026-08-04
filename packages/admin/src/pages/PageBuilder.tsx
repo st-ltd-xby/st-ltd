@@ -10,7 +10,8 @@ import {
   FormOutlined, DeleteOutlined, EditOutlined, EyeOutlined,
   UploadOutlined, PlusOutlined, LinkOutlined,
   ArrowUpOutlined, ArrowDownOutlined, SaveOutlined,
-  FolderOutlined, ThunderboltOutlined, CheckCircleOutlined
+  FolderOutlined, ThunderboltOutlined, CheckCircleOutlined, GlobalOutlined,
+  PhoneOutlined, MailOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
@@ -29,7 +30,7 @@ const getAuthHeaders = () => ({
 
 interface PageComponent {
   id: string;
-  type: 'title' | 'text' | 'image' | 'button' | 'divider' | 'spacing' | 'video' | 'form';
+  type: 'title' | 'text' | 'image' | 'button' | 'divider' | 'spacing' | 'video' | 'form' | 'contact';
   props: Record<string, any>;
 }
 
@@ -63,6 +64,7 @@ const COMPONENT_LIBRARY = [
   { type: 'spacing' as const, label: '间距', icon: <ColumnWidthOutlined />, defaultProps: { height: 24 } },
   { type: 'video' as const, label: '视频', icon: <VideoCameraOutlined />, defaultProps: { url: '', poster: '', autoplay: false } },
   { type: 'form' as const, label: '表单', icon: <FormOutlined />, defaultProps: { title: '联系我们', fields: [{ name: '姓名', type: 'text', required: true }, { name: '电话', type: 'tel', required: true }, { name: '留言', type: 'textarea', required: false }] } },
+  { type: 'contact' as const, label: '联系', icon: <PhoneOutlined />, defaultProps: { name: '联系人姓名', email: 'email@example.com', phone: '400-123-4567', title: '联系我们' } },
 ];
 
 // ==================== Component Renderer ====================
@@ -131,6 +133,29 @@ function ComponentRenderer({ comp, selected, onClick }: { comp: PageComponent; s
         return <div>未知组件</div>;
     }
   };
+
+  // 联系组件渲染（固定版式）
+  if (comp.type === 'contact') {
+    return (
+      <div style={{ background: '#fafafa', padding: 24, borderRadius: 8, border: '1px solid #f0f0f0' }}>
+        {comp.props.title && <h3 style={{ marginTop: 0, marginBottom: 16 }}>{comp.props.title}</h3>}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ color: '#999', minWidth: 60 }}>联系人：</span>
+            <span style={{ color: '#333' }}>{comp.props.name || '-'}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ color: '#999', minWidth: 60 }}>邮箱：</span>
+            <span style={{ color: '#1677ff' }}>{comp.props.email || '-'}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ color: '#999', minWidth: 60 }}>电话：</span>
+            <span style={{ color: '#333' }}>{comp.props.phone || '-'}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -310,6 +335,15 @@ function PropertyPanel({ comp, onChange }: { comp: PageComponent; onChange: (pro
                 </Button>
               </div>
             </Form.Item>
+          </>
+        );
+      case 'contact':
+        return (
+          <>
+            <Form.Item label="标题"><Input value={p.title || ''} onChange={e => onChange({ ...p, title: e.target.value })} placeholder="联系我们" /></Form.Item>
+            <Form.Item label="联系人"><Input value={p.name || ''} onChange={e => onChange({ ...p, name: e.target.value })} placeholder="联系人姓名" /></Form.Item>
+            <Form.Item label="邮箱"><Input value={p.email || ''} onChange={e => onChange({ ...p, email: e.target.value })} placeholder="email@example.com" /></Form.Item>
+            <Form.Item label="电话"><Input value={p.phone || ''} onChange={e => onChange({ ...p, phone: e.target.value })} placeholder="400-123-4567" /></Form.Item>
           </>
         );
       default:
@@ -617,6 +651,21 @@ export default function PageBuilder() {
         ]}>
         <Alert message="页面保存成功！" description="您可以生成推广链接，用于企业推广。每个链接都可以追踪点击数据。"
           type="success" showIcon style={{ marginBottom: 16 }} />
+        {currentPage?.slug && (
+          <Card size="small" style={{ marginBottom: 16, background: '#f6ffed', borderColor: '#b7eb8f' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ flex: 1 }}>
+                <Text type="secondary">页面链接：</Text>
+                <Text copyable style={{ marginLeft: 8, color: '#1677ff', wordBreak: 'break-all' }}>
+                  {`https://st-ltd-web.pages.dev/p/${currentPage.slug}`}
+                </Text>
+              </div>
+              <Button type="link" icon={<GlobalOutlined />} onClick={() => window.open(`https://st-ltd-web.pages.dev/p/${currentPage.slug}`, '_blank')}>
+                预览
+              </Button>
+            </div>
+          </Card>
+        )}
         {promotionLinks.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 30 }}>
             <LinkOutlined style={{ fontSize: 48, color: '#d9d9d9', marginBottom: 12 }} />

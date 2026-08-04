@@ -1,15 +1,41 @@
-// Cloudflare Workers entry point
-import app from './packages/server/src/app.ts';
-
 export default {
   async fetch(request, env, ctx) {
-    // Set environment variables from Workers vars
-    process.env.NODE_ENV = env.NODE_ENV || 'production';
-    process.env.JWT_SECRET = env.JWT_SECRET;
-    process.env.JWT_REFRESH_SECRET = env.JWT_REFRESH_SECRET;
-    process.env.JWT_EXPIRES_IN = env.JWT_EXPIRES_IN;
-    process.env.DATABASE_URL = env.DATABASE_URL;
+    const url = new URL(request.url);
+    
+    // 只处理 /api/* 请求
+    if (!url.pathname.startsWith('/api/')) {
+      return new Response('Not Found', { status: 404 });
+    }
 
-    return app(request);
+    const backendUrl = 'https://st-ltd-api-production.up.railway.app' + url.pathname + url.search;
+
+    const headers = new Headers(request.headers);
+    headers.delete('host');
+    headers.delete('origin');
+    headers.delete('referer');
+
+    const backendRequest = new Request(backendUrl, {
+      method: request.method,
+      headers: headers,
+      body: request.body,
+      redirect: 'follow',
+    });
+
+    try {
+      const response = await fetch(backendRequest, { cf: { cacheTtl: 0, cacheEverything: false } });
+      const responseHeaders = new Headers(response.headers);
+      responseHeaders.set('Access-Control-Allow-Origin', '*');
+      responseHeaders.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+      responseHeaders.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      return new Response(response.body, {
+        status: response.status,
+        headers: responseHeaders,
+      });
+    } catch (error) {
+      return new Response(JSON.stringify({ code: -1, message: 'Backend unavailable' }), {
+        status: 503,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      });
+    }
   },
 };

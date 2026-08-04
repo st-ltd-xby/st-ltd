@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Typography, Spin, Result, Button } from 'antd';
-import { ArrowLeftOutlined, PictureOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, PictureOutlined, PhoneOutlined, MailOutlined, UserOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
 
@@ -33,23 +33,33 @@ function RenderPageComponent({ comp }: { comp: any }) {
   const { type, props } = comp;
 
   switch (type) {
-    case 'heading': {
-      const style: React.CSSProperties = { textAlign: props.align, color: props.color, margin: 0 };
-      switch (props.level) {
-        case 1: return <h1 style={style}>{props.content}</h1>;
-        case 3: return <h3 style={style}>{props.content}</h3>;
-        case 4: return <h4 style={style}>{props.content}</h4>;
-        default: return <h2 style={style}>{props.content}</h2>;
+    case 'heading':
+    case 'title': {
+      const text = props.content || props.text || '';
+      const style: React.CSSProperties = { textAlign: props.align || 'left', color: props.color || '#333', margin: 0, fontSize: props.fontSize };
+      if (props.level) {
+        switch (props.level) {
+          case 1: return <h1 style={style}>{text}</h1>;
+          case 3: return <h3 style={style}>{text}</h3>;
+          case 4: return <h4 style={style}>{text}</h4>;
+          default: return <h2 style={style}>{text}</h2>;
+        }
       }
+      // 管理端 title 组件：根据 fontSize 决定标签
+      const size = props.fontSize || 28;
+      if (size >= 32) return <h1 style={style}>{text}</h1>;
+      if (size >= 24) return <h2 style={style}>{text}</h2>;
+      if (size >= 20) return <h3 style={style}>{text}</h3>;
+      return <h4 style={style}>{text}</h4>;
     }
     case 'text':
-      return <p style={{ fontSize: props.fontSize, color: props.color, textAlign: props.align, margin: '12px 0' }}>{props.content}</p>;
+      return <p style={{ fontSize: props.fontSize, color: props.color, textAlign: props.align, margin: '12px 0', lineHeight: props.lineHeight }}>{props.content || props.text || ''}</p>;
     case 'image':
       return <ImageComponent props={props} />;
     case 'button':
       return (
         <div style={{ textAlign: 'center', margin: '12px 0' }}>
-          <Button type="primary" size={props.size} style={{ background: props.color, borderColor: props.color }} href={props.url}>
+          <Button type="primary" size={props.size} style={{ background: props.color, borderColor: props.color }} href={props.url || props.link}>
             {props.text}
           </Button>
         </div>
@@ -57,22 +67,51 @@ function RenderPageComponent({ comp }: { comp: any }) {
     case 'divider':
       return <div style={{ margin: '16px 0' }}><hr style={{ border: 'none', borderTop: `1px solid ${props.color}`, margin: 0 }} />{props.text && <Text type="secondary" style={{ background: '#fff', padding: '0 12px' }}>{props.text}</Text>}</div>;
     case 'spacer':
+    case 'spacing':
       return <div style={{ height: props.height }} />;
     case 'video':
       return props.url ? (
         <video src={props.url} style={{ width: props.width, height: props.height, borderRadius: 8, margin: '12px 0' }} controls />
       ) : null;
-    case 'form':
+    case 'form': {
+      const formFields = Array.isArray(props.fields)
+        ? props.fields
+        : (props.fields || '').split(',').map((f: string) => ({ name: f.trim(), type: 'text', required: true }));
       return (
         <div style={{ border: '1px solid #f0f0f0', borderRadius: 8, padding: 24, margin: '12px 0' }}>
           <Title level={4} style={{ marginTop: 0 }}>{props.title}</Title>
-          {(props.fields || '').split(',').map((f: string, i: number) => (
+          {formFields.map((f: any, i: number) => (
             <div key={i} style={{ marginBottom: 16 }}>
-              <Text strong style={{ display: 'block', marginBottom: 4 }}>{f.trim()}</Text>
-              <input type="text" style={{ width: '100%', padding: '8px 12px', border: '1px solid #d9d9d9', borderRadius: 6, fontSize: 14 }} />
+              <Text strong style={{ display: 'block', marginBottom: 4 }}>{f.name || f}</Text>
+              {f.type === 'textarea' ? (
+                <textarea style={{ width: '100%', padding: '8px 12px', border: '1px solid #d9d9d9', borderRadius: 6, fontSize: 14, minHeight: 80 }} />
+              ) : (
+                <input type={f.type === 'tel' ? 'tel' : f.type === 'email' ? 'email' : 'text'} style={{ width: '100%', padding: '8px 12px', border: '1px solid #d9d9d9', borderRadius: 6, fontSize: 14 }} />
+              )}
             </div>
           ))}
-          <Button type="primary" block size="large">{props.submitText}</Button>
+          <Button type="primary" block size="large">{props.submitText || '提交'}</Button>
+        </div>
+      );
+    }
+    case 'contact':
+      return (
+        <div style={{ background: '#fafafa', padding: 24, borderRadius: 8, border: '1px solid #f0f0f0', margin: '12px 0' }}>
+          {props.title && <Title level={4} style={{ marginTop: 0, marginBottom: 16 }}>{props.title}</Title>}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <UserOutlined style={{ color: '#999' }} /> <span style={{ color: '#999', minWidth: 60 }}>联系人：</span>
+              <span style={{ color: '#333' }}>{props.name || '-'}</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <MailOutlined style={{ color: '#999' }} /> <span style={{ color: '#999', minWidth: 60 }}>邮箱：</span>
+              <a href={`mailto:${props.email}`} style={{ color: '#1677ff' }}>{props.email || '-'}</a>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <PhoneOutlined style={{ color: '#999' }} /> <span style={{ color: '#999', minWidth: 60 }}>电话：</span>
+              <a href={`tel:${props.phone}`} style={{ color: '#333' }}>{props.phone || '-'}</a>
+            </div>
+          </div>
         </div>
       );
     default:

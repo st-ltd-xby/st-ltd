@@ -16,7 +16,8 @@ import {
   Row, 
   Col,
   Tooltip,
-  Switch
+  Switch,
+  Typography
 } from 'antd';
 import { 
   SearchOutlined, 
@@ -37,6 +38,7 @@ import { API_BASE_URL } from '../config/api';
 
 const { TabPane } = Tabs;
 const { Option } = Select;
+const { Text } = Typography;
 
 interface Page {
   id: string;
@@ -48,6 +50,7 @@ interface Page {
   type: string;
   seoTitle?: string;
   seoDescription?: string;
+  seoScore?: number;
   traffic: number;
   auditStatus: 'pending' | 'approved' | 'rejected';
   publishedAt?: string;
@@ -65,6 +68,8 @@ const PageBuilderManagement: React.FC = () => {
   const [activeTab, setActiveTab] = useState('pages');
   const [searchTerm, setSearchTerm] = useState('');
   const [form] = Form.useForm();
+  const [seoFixPage, setSeoFixPage] = useState<Page | null>(null);
+  const [seoFixVisible, setSeoFixVisible] = useState(false);
   
   const pageTypes = [
     { value: 'landing', label: '落地页', color: 'blue' },
@@ -86,6 +91,33 @@ const PageBuilderManagement: React.FC = () => {
     { value: 'approved', label: '已批准', color: 'success' },
     { value: 'rejected', label: '已拒绝', color: 'error' },
   ];
+
+  // 计算页面SEO评分
+  const calcSeoScore = (page: Page): number => {
+    let score = 0;
+    if (page.seoTitle && page.seoTitle.length >= 10 && page.seoTitle.length <= 60) score += 25;
+    else if (page.seoTitle) score += 10;
+    if (page.seoDescription && page.seoDescription.length >= 50 && page.seoDescription.length <= 160) score += 25;
+    else if (page.seoDescription) score += 10;
+    if (page.slug && page.slug.length > 0) score += 15;
+    if (page.status === 'published') score += 20;
+    if (page.title && page.title.length >= 5) score += 15;
+    return score;
+  };
+
+  // 获取SEO修复建议
+  const getSeoFixes = (page: Page): string[] => {
+    const fixes: string[] = [];
+    if (!page.seoTitle || page.seoTitle.length < 10) fixes.push('SEO标题过短，建议10-60个字符');
+    else if (page.seoTitle.length > 60) fixes.push('SEO标题过长，建议控制在60个字符以内');
+    if (!page.seoDescription || page.seoDescription.length < 50) fixes.push('SEO描述过短，建议50-160个字符');
+    else if (page.seoDescription.length > 160) fixes.push('SEO描述过长，建议控制在160个字符以内');
+    if (!page.slug) fixes.push('页面路径(slug)未设置');
+    if (page.status !== 'published') fixes.push('页面未发布，发布后才能被搜索引擎收录');
+    if (!page.title || page.title.length < 5) fixes.push('页面标题过短，建议至少5个字符');
+    if (fixes.length === 0) fixes.push('SEO状态良好，无需修复');
+    return fixes;
+  };
 
   // 获取页面列表
   const fetchPages = async () => {
@@ -466,6 +498,43 @@ const PageBuilderManagement: React.FC = () => {
                           删除
                         </Button>
                       </Popconfirm>
+                    </Space>
+                  )}
+                />
+              </Table>
+            </Card>
+          </TabPane>
+          
+          <TabPane tab={`页面SEO设置 (${pages.filter(p => p.status === 'published').length})`} key="seo">
+            <Card title="页面SEO评分与优化">
+              <Table 
+                dataSource={pages.map(p => ({ ...p, seoScore: calcSeoScore(p) }))}
+                rowKey="id"
+                loading={loading}
+                pagination={{ pageSize: 10 }}
+              >
+                <Table.Column title="页面标题" dataIndex="title" key="title" render={(t) => t || '-'} />
+                <Table.Column title="路径" dataIndex="slug" key="slug" render={(s) => <Tag>/p/{s}</Tag>} />
+                <Table.Column title="SEO标题" dataIndex="seoTitle" key="seoTitle" render={(t) => t || <Text type="danger">未设置</Text>} />
+                <Table.Column title="SEO描述" dataIndex="seoDescription" key="seoDescription" render={(d) => d ? (d.length > 30 ? d.substring(0, 30) + '...' : d) : <Text type="danger">未设置</Text>} />
+                <Table.Column 
+                  title="SEO评分" 
+                  dataIndex="seoScore" 
+                  key="seoScore"
+                  render={(score: number) => (
+                    <Tag color={score >= 80 ? 'green' : score >= 50 ? 'gold' : 'red'}>{score}/100</Tag>
+                  )}
+                  sorter={(a: any, b: any) => a.seoScore - b.seoScore}
+                />
+                <Table.Column title="状态" dataIndex="status" key="status" render={(s) => <Tag color={s === 'published' ? 'green' : 'default'}>{s === 'published' ? '已发布' : s === 'draft' ? '草稿' : s}</Tag>} />
+                <Table.Column
+                  title="操作"
+                  key="action"
+                  render={(_: any, record: any) => (
+                    <Space>
+                      <Button type="link" icon={<EditOutlined />} onClick={() => { setSeoFixPage(record); setSeoFixVisible(true); }}>
+                        SEO修复
+                      </Button>
                     </Space>
                   )}
                 />
