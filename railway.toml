@@ -1,8 +1,8 @@
 [build]
 builder = "NIXPACKS"
-buildCommand = "cd packages/server && npx prisma generate && (npx tsc --skipLibCheck || true)"
+buildCommand = "cd packages/server && npx prisma generate && npx prisma db push && (npx tsc --skipLibCheck || true)"
 
 [deploy]
-startCommand = "cd packages/server && npx prisma db push --accept-data-loss && node dist/app.js"
+startCommand = "cd packages/server && node dist/app.js"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 100

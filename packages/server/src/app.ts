@@ -33,9 +33,9 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 app.use('/api/', rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 200,
-  message: { code: 429, message: '�������Ƶ�������Ժ�����', data: null },
+  windowMs: 1 * 60 * 1000,
+  max: 1000,
+  message: { code: 429, message: 'Too many requests', data: null },
 }));
 
 app.get('/', (req, res) => {
