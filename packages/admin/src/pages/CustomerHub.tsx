@@ -1,12 +1,12 @@
 ﻿import React, { useState, useEffect } from 'react';
 import {
   Card, Table, Button, Space, Input, Modal, Form, message, Select, Tag,
-  Drawer, Descriptions, Tabs, Popconfirm, Badge, Tooltip, Row, Col, Statistic
+  Drawer, Descriptions, Tabs, Popconfirm, Badge, Tooltip, Row, Col, Statistic, Timeline, Divider
 } from 'antd';
 import {
   SearchOutlined, PlusOutlined, EditOutlined, DeleteOutlined, EyeOutlined,
   TeamOutlined, UserOutlined, PhoneOutlined, MailOutlined, EnvironmentOutlined,
-  StarOutlined, SwapOutlined, FundOutlined, ContactsOutlined
+  StarOutlined, SwapOutlined, FundOutlined, ContactsOutlined, MessageOutlined, ClockCircleOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
@@ -33,6 +33,10 @@ const CustomerHub: React.FC = () => {
   // 抽屉状态
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [drawerCustomer, setDrawerCustomer] = useState<any>(null);
+  const [followUps, setFollowUps] = useState<any[]>([]);
+  const [followUpLoading, setFollowUpLoading] = useState(false);
+  const [followUpForm] = Form.useForm();
+  const [followUpModalOpen, setFollowUpModalOpen] = useState(false);
 
   // 统计数据
   const [stats, setStats] = useState({ total: 0, active: 0, prospect: 0, churned: 0 });
@@ -121,16 +125,49 @@ const CustomerHub: React.FC = () => {
       if (res.data.code === 0 || res.data.code === 200) {
         setDrawerCustomer(res.data.data);
         setDrawerVisible(true);
+        // 加载跟进记录
+        loadFollowUps(record.id);
       }
     } catch (error) {
       message.error('获取详情失败');
     }
   };
 
+  // 加载跟进记录
+  const loadFollowUps = async (customerId: string) => {
+    setFollowUpLoading(true);
+    try {
+      const res = await axios.get(`${API_BASE}/customers/${customerId}/follow-ups`, { headers: getHeaders() });
+      if (res.data.code === 0 || res.data.code === 200) {
+        setFollowUps(Array.isArray(res.data.data) ? res.data.data : []);
+      }
+    } catch { setFollowUps([]); }
+    finally { setFollowUpLoading(false); }
+  };
+
+  // 创建跟进记录
+  const handleCreateFollowUp = async () => {
+    if (!drawerCustomer) return;
+    try {
+      const values = await followUpForm.validateFields();
+      await axios.post(`${API_BASE}/customers/${drawerCustomer.id}/follow-ups`, values, { headers: getHeaders() });
+      message.success('跟进记录已添加');
+      setFollowUpModalOpen(false);
+      followUpForm.resetFields();
+      loadFollowUps(drawerCustomer.id);
+      // 刷新客户详情
+      const res = await axios.get(`${API_BASE}/customers/${drawerCustomer.id}`, { headers: getHeaders() });
+      if (res.data.code === 0) setDrawerCustomer(res.data.data);
+    } catch { message.error('创建失败'); }
+  };
+
   // 等级和阶段配置
   const levelColors: Record<string, string> = { A: 'gold', B: 'blue', C: 'green' };
   const stageColors: Record<string, string> = { prospect: 'orange', active: 'green', churned: 'red' };
   const stageLabels: Record<string, string> = { prospect: '潜在客户', active: '活跃客户', churned: '流失客户' };
+  const sourceLabels: Record<string, string> = {
+    promotion: '推广链接', website: '官网', form: '表单', manual: '手动录入', baidu: '百度', wechat: '微信', other: '其他'
+  };
 
   const columns = [
     {
@@ -160,6 +197,22 @@ const CustomerHub: React.FC = () => {
       key: 'stage',
       width: 100,
       render: (stage: string) => <Tag color={stageColors[stage]}>{stageLabels[stage] || stage}</Tag>,
+    },
+    {
+      title: '来源',
+      dataIndex: 'lead',
+      key: 'source',
+      width: 100,
+      render: (lead: any) => (
+        <Tag>{lead?.source ? sourceLabels[lead.source] || lead.source : '手动录入'}</Tag>
+      ),
+    },
+    {
+      title: '创建时间',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      width: 110,
+      render: (d: string) => d ? new Date(d).toLocaleDateString() : '-',
     },
     {
       title: '行业',
@@ -530,9 +583,81 @@ const CustomerHub: React.FC = () => {
                 />
               ) : <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>暂无关联商机</div>}
             </TabPane>
+            <TabPane tab="来源线索" key="lead">
+              {drawerCustomer.lead ? (
+                <div>
+                  <Descriptions column={2} bordered size="small" style={{ marginBottom: 16 }}>
+                    <Descriptions.Item label="线索名称">{drawerCustomer.lead.name}</Descriptions.Item>
+                    <Descriptions.Item label="来源">
+                      <Tag>{drawerCustomer.lead.source === 'promotion' ? '推广链接' : drawerCustomer.lead.source}</Tag>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="电话">{drawerCustomer.lead.phone || '-'}</Descriptions.Item>
+                    <Descriptions.Item label="邮箱">{drawerCustomer.lead.email || '-'}</Descriptions.Item>
+                    <Descriptions.Item label="创建时间">{new Date(drawerCustomer.lead.createdAt).toLocaleString()}</Descriptions.Item>
+                    <Descriptions.Item label="状态">
+                      <Tag color={drawerCustomer.lead.status === 'qualified' ? 'green' : 'blue'}>
+                        {drawerCustomer.lead.status === 'qualified' ? '已转化' : drawerCustomer.lead.status}
+                      </Tag>
+                    </Descriptions.Item>
+                  </Descriptions>
+                </div>
+              ) : <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>该客户为手动创建，无关联线索</div>}
+            </TabPane>
+            <TabPane tab="跟进记录" key="followUps">
+              <div style={{ marginBottom: 16 }}>
+                <Button type="primary" size="small" icon={<PlusOutlined />} onClick={() => setFollowUpModalOpen(true)}>
+                  新建跟进
+                </Button>
+              </div>
+              {followUpLoading ? (
+                <div style={{ textAlign: 'center', padding: 40 }}><ClockCircleOutlined spin /> 加载中...</div>
+              ) : followUps.length > 0 ? (
+                <Timeline>
+                  {followUps.map((f: any) => (
+                    <Timeline.Item key={f.id} color={f.type === 'phone' ? 'blue' : f.type === 'visit' ? 'green' : f.type === 'email' ? 'purple' : 'gray'}>
+                      <p><strong>{f.type === 'phone' ? '📞 电话' : f.type === 'visit' ? '🏢 拜访' : f.type === 'email' ? '📧 邮件' : f.type === 'wechat' ? '💬 微信' : f.type}</strong>
+                        {f.user?.name && <span style={{ marginLeft: 8, color: '#888' }}>— {f.user.name}</span>}
+                        <span style={{ marginLeft: 8, color: '#aaa' }}>{new Date(f.createdAt).toLocaleString()}</span>
+                      </p>
+                      <p>{f.content}</p>
+                      {f.nextAction && <p style={{ color: '#1890ff' }}>下一步：{f.nextAction}</p>}
+                    </Timeline.Item>
+                  ))}
+                </Timeline>
+              ) : <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>暂无跟进记录，点击上方按钮添加</div>}
+            </TabPane>
           </Tabs>
         )}
       </Drawer>
+
+      {/* 新建跟进记录弹窗 */}
+      <Modal
+        title="新建跟进记录"
+        open={followUpModalOpen}
+        onCancel={() => { setFollowUpModalOpen(false); followUpForm.resetFields(); }}
+        onOk={handleCreateFollowUp}
+        width={500}
+        okText="保存"
+        cancelText="取消"
+      >
+        <Form form={followUpForm} layout="vertical">
+          <Form.Item name="type" label="跟进方式" rules={[{ required: true, message: '请选择跟进方式' }]}>
+            <Select placeholder="选择跟进方式">
+              <Option value="phone"> 电话</Option>
+              <Option value="visit">🏢 拜访</Option>
+              <Option value="email">📧 邮件</Option>
+              <Option value="wechat"> 微信</Option>
+              <Option value="other">其他</Option>
+            </Select>
+          </Form.Item>
+          <Form.Item name="content" label="跟进内容" rules={[{ required: true, message: '请输入跟进内容' }]}>
+            <Input.TextArea rows={4} placeholder="记录本次跟进的详细内容..." />
+          </Form.Item>
+          <Form.Item name="nextAction" label="下一步计划">
+            <Input placeholder="如：下周二次电话跟进" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 };

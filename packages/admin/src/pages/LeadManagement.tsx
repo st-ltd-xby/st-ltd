@@ -32,6 +32,11 @@ const LeadManagement: React.FC = () => {
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [drawerLead, setDrawerLead] = useState<any>(null);
 
+  // 转化弹窗
+  const [convertModalOpen, setConvertModalOpen] = useState(false);
+  const [convertLead, setConvertLead] = useState<any>(null);
+  const [convertForm] = Form.useForm();
+
   // 统计
   const [stats, setStats] = useState({ total: 0, new: 0, following: 0, converted: 0 });
 
@@ -113,11 +118,21 @@ const LeadManagement: React.FC = () => {
     }
   };
 
-  // 转化为客户
-  const convertToCustomer = async (lead: any) => {
+  // 转化为客户 - 打开弹窗
+  const openConvertModal = (lead: any) => {
+    setConvertLead(lead);
+    convertForm.setFieldsValue({ level: 'C', stage: 'active', note: '' });
+    setConvertModalOpen(true);
+  };
+
+  // 转化为客户 - 确认
+  const convertToCustomer = async () => {
     try {
-      await axios.post(`${API_BASE}/leads/${lead.id}/convert`, {}, { headers: getHeaders() });
+      const values = await convertForm.validateFields();
+      await axios.post(`${API_BASE}/leads/${convertLead.id}/convert`, values, { headers: getHeaders() });
       message.success('线索已转化为客户');
+      setConvertModalOpen(false);
+      convertForm.resetFields();
       fetchLeads(pagination.current);
       fetchStats();
     } catch (error) {
@@ -235,7 +250,7 @@ const LeadManagement: React.FC = () => {
           </Tooltip>
           {record.status === 'new' || record.status === 'following' ? (
             <Tooltip title="转化为客户">
-              <Button type="link" size="small" icon={<SwapOutlined />} style={{ color: '#52c41a' }} onClick={() => convertToCustomer(record)} />
+              <Button type="link" size="small" icon={<SwapOutlined />} style={{ color: '#52c41a' }} onClick={() => openConvertModal(record)} />
             </Tooltip>
           ) : null}
           <Popconfirm title="确定删除此线索？" onConfirm={() => handleDelete(record.id)}>
@@ -529,6 +544,46 @@ const LeadManagement: React.FC = () => {
           </Tabs>
         )}
       </Drawer>
+
+      {/* 线索转化弹窗 */}
+      <Modal
+        title={`转化线索: ${convertLead?.name || ''}`}
+        open={convertModalOpen}
+        onCancel={() => { setConvertModalOpen(false); convertForm.resetFields(); }}
+        onOk={convertToCustomer}
+        width={500}
+        okText="确认转化"
+        cancelText="取消"
+      >
+        <div style={{ marginBottom: 16, padding: '12px 16px', background: '#f5f5f5', borderRadius: 8 }}>
+          <div style={{ marginBottom: 4 }}><strong>线索信息：</strong>{convertLead?.name} {convertLead?.company && `(${convertLead.company})`}</div>
+          <div style={{ color: '#888', fontSize: 12 }}>来源：{convertLead?.source} | 电话：{convertLead?.phone || '无'} | 邮箱：{convertLead?.email || '无'}</div>
+        </div>
+        <Form form={convertForm} layout="vertical">
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="level" label="客户等级" rules={[{ required: true }]}>
+                <Select>
+                  <Option value="A">A级（重要客户）</Option>
+                  <Option value="B">B级（一般客户）</Option>
+                  <Option value="C">C级（普通客户）</Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="stage" label="客户阶段" rules={[{ required: true }]}>
+                <Select>
+                  <Option value="active">活跃客户</Option>
+                  <Option value="prospect">潜在客户</Option>
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+          <Form.Item name="note" label="备注">
+            <Input.TextArea rows={3} placeholder="客户备注信息（可选）" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 };

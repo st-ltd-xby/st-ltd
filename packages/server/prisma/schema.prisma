@@ -245,6 +245,7 @@ model Lead {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
   followUps   FollowUp[]
+  customer    Customer?
   assignee    User?      @relation("LeadAssignee", fields: [assigneeId], references: [id])
   tenant      Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   visitor     Visitor?   @relation(fields: [visitorId], references: [id])
@@ -267,14 +268,15 @@ model Customer {
   contactEmail  String?
   address       String?
   website       String?
-  leadId        String?
+  leadId        String?     @unique
   tags          String
   totalDeal     Float         @default(0)
   note          String?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   contacts      Contact[]
-  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead          Lead?       @relation(fields: [leadId], references: [id])
+  tenant        Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   opportunities Opportunity[]
 
   @@index([tenantId, level])

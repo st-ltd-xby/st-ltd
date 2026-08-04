@@ -516,7 +516,7 @@ router.get('/customers', authorizeRole(['admin']), async (req: Request, res: Res
       whereConditions.OR = [
         { name: { contains: search as string } },
         { contactName: { contains: search as string } },
-        { company: { contains: search as string } }
+        { contactEmail: { contains: search as string } }
       ];
     }
     
@@ -536,7 +536,8 @@ router.get('/customers', authorizeRole(['admin']), async (req: Request, res: Res
         orderBy: { createdAt: 'desc' },
         include: {
           contacts: true,
-          opportunities: true
+          opportunities: true,
+          lead: { select: { id: true, source: true, createdAt: true } }
         }
       }),
       prisma.customer.count({ where: whereConditions })
@@ -556,7 +557,8 @@ router.get('/customers/:id', authorizeRole(['admin']), async (req: Request, res:
       where: { id, tenantId: req.user!.tenantId },
       include: {
         contacts: true,
-        opportunities: true
+        opportunities: true,
+        lead: { include: { followUps: { orderBy: { createdAt: 'desc' } } } }
       }
     });
 
@@ -971,6 +973,8 @@ router.post('/leads/:id/convert', authorizeRole(['admin']), async (req: Request,
     const lead = await prisma.lead.findUnique({ where: { id } });
     if (!lead) return notFound(res, '线索不存在');
     
+    const { level, stage, note: convertNote } = req.body;
+    
     // 创建客户
     const customer = await prisma.customer.create({
       data: {
@@ -980,9 +984,10 @@ router.post('/leads/:id/convert', authorizeRole(['admin']), async (req: Request,
         contactEmail: lead.email,
         tenantId: lead.tenantId,
         leadId: lead.id,
-        stage: 'active',
-        level: 'C',
-        tags: lead.tags || ''
+        stage: stage || 'active',
+        level: level || 'C',
+        tags: lead.tags || '',
+        note: convertNote || ''
       }
     });
     
@@ -993,6 +998,92 @@ router.post('/leads/:id/convert', authorizeRole(['admin']), async (req: Request,
     });
     
     success(res, customer, '线索已转化为客户');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 客户跟进记录 - 列表
+router.get('/customers/:id/follow-ups', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const customer = await prisma.customer.findUnique({ where: { id, tenantId: req.user!.tenantId } });
+    if (!customer) return notFound(res, '客户不存在');
+    
+    let followUps: any[] = [];
+    // 如果客户关联了线索，获取线索的跟进记录
+    if (customer.leadId) {
+      followUps = await prisma.followUp.findMany({
+        where: { leadId: customer.leadId },
+        orderBy: { createdAt: 'desc' },
+        include: { user: { select: { id: true, name: true } } }
+      });
+    }
+    
+    success(res, followUps);
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 客户跟进记录 - 创建
+router.post('/customers/:id/follow-ups', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const customer = await prisma.customer.findUnique({ where: { id, tenantId: req.user!.tenantId } });
+    if (!customer) return notFound(res, '客户不存在');
+    
+    const { type, content, nextAction, nextTime } = req.body;
+    if (!type || !content) return fail(res, '跟进类型和内容不能为空');
+    
+    // 如果客户没有关联线索，先创建一个线索
+    let leadId = customer.leadId;
+    if (!leadId) {
+      const lead = await prisma.lead.create({
+        data: {
+          name: customer.contactName || customer.name,
+          phone: customer.contactPhone,
+          email: customer.contactEmail,
+          company: customer.name,
+          source: 'manual',
+          status: 'following',
+          priority: 'medium',
+          tags: customer.tags || '',
+          tenantId: customer.tenantId,
+        }
+      });
+      leadId = lead.id;
+      await prisma.customer.update({ where: { id }, data: { leadId: lead.id } });
+    }
+    
+    const followUp = await prisma.followUp.create({
+      data: {
+        leadId,
+        userId: req.user!.userId,
+        type,
+        content,
+        nextAction,
+        nextTime: nextTime ? new Date(nextTime) : undefined,
+      },
+      include: { user: { select: { id: true, name: true } } }
+    });
+    
+    success(res, followUp, '跟进记录创建成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 客户快捷备注更新
+router.put('/customers/:id/note', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const { note } = req.body;
+    const customer = await prisma.customer.update({
+      where: { id, tenantId: req.user!.tenantId },
+      data: { note }
+    });
+    success(res, customer, '备注更新成功');
   } catch (error: any) {
     fail(res, error.message);
   }
