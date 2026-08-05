@@ -549,6 +549,22 @@ router.get('/customers', authorizeRole(['admin']), async (req: Request, res: Res
   }
 });
 
+// 客户统计（必须在 /customers/:id 之前）
+router.get('/customers/stats', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const [total, active, prospect, churned] = await Promise.all([
+      prisma.customer.count({ where: { tenantId } }),
+      prisma.customer.count({ where: { tenantId, stage: 'active' } }),
+      prisma.customer.count({ where: { tenantId, stage: 'prospect' } }),
+      prisma.customer.count({ where: { tenantId, stage: 'churned' } })
+    ]);
+    success(res, { total, active, prospect, churned }, '客户统计获取成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
 // 获取客户详情
 router.get('/customers/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
   try {
@@ -684,6 +700,22 @@ router.get('/leads', authorizeRole(['admin']), async (req: Request, res: Respons
   }
 });
 
+// 线索统计（必须在 /leads/:id 之前，否则 stats 会被当作 :id 参数）
+router.get('/leads/stats', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const [total, newLeads, following, converted] = await Promise.all([
+      prisma.lead.count({ where: { tenantId } }),
+      prisma.lead.count({ where: { tenantId, status: 'new' } }),
+      prisma.lead.count({ where: { tenantId, status: 'following' } }),
+      prisma.lead.count({ where: { tenantId, status: 'won' } })
+    ]);
+    success(res, { total, new: newLeads, following, converted }, '线索统计获取成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
 // 获取线索详情
 router.get('/leads/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
   try {
@@ -804,6 +836,60 @@ router.get('/opportunities', authorizeRole(['admin']), async (req: Request, res:
   }
 });
 
+// 商机统计（必须在 /opportunities/:id 之前）
+router.get('/opportunities/stats', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const [total, pending, following, won, totalAmountResult, wonAmountResult] = await Promise.all([
+      prisma.opportunity.count({ where: { tenantId } }),
+      prisma.opportunity.count({ where: { tenantId, stage: 'pending' } }),
+      prisma.opportunity.count({ where: { tenantId, stage: 'following' } }),
+      prisma.opportunity.count({ where: { tenantId, stage: 'won' } }),
+      prisma.opportunity.aggregate({ where: { tenantId }, _sum: { amount: true } }),
+      prisma.opportunity.aggregate({ where: { tenantId, stage: 'won' }, _sum: { amount: true } })
+    ]);
+    const totalAmount = totalAmountResult._sum.amount || 0;
+    const wonAmount = wonAmountResult._sum.amount || 0;
+    const conversionRate = total > 0 ? (won / total) * 100 : 0;
+    success(res, { total, pending, following, won, totalAmount, wonAmount, conversionRate }, '商机统计获取成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 商机看板数据（必须在 /opportunities/:id 之前）
+router.get('/opportunities/board', authorizeRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.user!.tenantId;
+    const [total, totalAmountResult, wonAmountResult, allOpps] = await Promise.all([
+      prisma.opportunity.count({ where: { tenantId } }),
+      prisma.opportunity.aggregate({ where: { tenantId }, _sum: { amount: true } }),
+      prisma.opportunity.aggregate({ where: { tenantId, stage: 'won' }, _sum: { amount: true } }),
+      prisma.opportunity.findMany({ where: { tenantId }, orderBy: { createdAt: 'desc' }, take: 10 })
+    ]);
+    
+    const totalAmount = totalAmountResult._sum.amount || 0;
+    const wonAmount = wonAmountResult._sum.amount || 0;
+    const won = allOpps.filter(o => o.stage === 'won').length;
+    const conversionRate = total > 0 ? (won / total) * 100 : 0;
+    
+    const byType: Record<string, number> = { supply_demand: 0, bidding: 0, trade: 0, resource: 0 };
+    const byTypeAmount: Record<string, number> = { supply_demand: 0, bidding: 0, trade: 0, resource: 0 };
+    const byStage: Record<string, number> = { pending: 0, following: 0, proposal: 0, negotiation: 0, won: 0, lost: 0 };
+    
+    const allOpportunities = await prisma.opportunity.findMany({ where: { tenantId } });
+    allOpportunities.forEach(opp => {
+      if (byType[opp.type] !== undefined) byType[opp.type]++;
+      if (byTypeAmount[opp.type] !== undefined) byTypeAmount[opp.type] += opp.amount;
+      if (byStage[opp.stage] !== undefined) byStage[opp.stage]++;
+    });
+    
+    success(res, { total, totalAmount, wonAmount, conversionRate, byType, byTypeAmount, byStage, recentOpps: allOpps.slice(0, 10) }, '商机看板数据获取成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
 // 获取商机详情
 router.get('/opportunities/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
   try {
@@ -889,78 +975,6 @@ router.delete('/opportunities/:id', authorizeRole(['admin']), async (req: Reques
     });
 
     success(res, null, '商机删除成功');
-  } catch (error: any) {
-    fail(res, error.message);
-  }
-});
-
-// 商机统计
-router.get('/opportunities/stats', authorizeRole(['admin']), async (req: Request, res: Response) => {
-  try {
-    const tenantId = req.user!.tenantId;
-    const [total, pending, following, won, totalAmountResult, wonAmountResult] = await Promise.all([
-      prisma.opportunity.count({ where: { tenantId } }),
-      prisma.opportunity.count({ where: { tenantId, stage: 'pending' } }),
-      prisma.opportunity.count({ where: { tenantId, stage: 'following' } }),
-      prisma.opportunity.count({ where: { tenantId, stage: 'won' } }),
-      prisma.opportunity.aggregate({ where: { tenantId }, _sum: { amount: true } }),
-      prisma.opportunity.aggregate({ where: { tenantId, stage: 'won' }, _sum: { amount: true } })
-    ]);
-    const totalAmount = totalAmountResult._sum.amount || 0;
-    const wonAmount = wonAmountResult._sum.amount || 0;
-    const conversionRate = total > 0 ? (won / total) * 100 : 0;
-    success(res, { total, pending, following, won, totalAmount, wonAmount, conversionRate }, '商机统计获取成功');
-  } catch (error: any) {
-    fail(res, error.message);
-  }
-});
-
-// 商机看板数据
-router.get('/opportunities/board', authorizeRole(['admin']), async (req: Request, res: Response) => {
-  try {
-    const tenantId = req.user!.tenantId;
-    const [total, totalAmountResult, wonAmountResult, allOpps] = await Promise.all([
-      prisma.opportunity.count({ where: { tenantId } }),
-      prisma.opportunity.aggregate({ where: { tenantId }, _sum: { amount: true } }),
-      prisma.opportunity.aggregate({ where: { tenantId, stage: 'won' }, _sum: { amount: true } }),
-      prisma.opportunity.findMany({ where: { tenantId }, orderBy: { createdAt: 'desc' }, take: 10 })
-    ]);
-    
-    const totalAmount = totalAmountResult._sum.amount || 0;
-    const wonAmount = wonAmountResult._sum.amount || 0;
-    const won = allOpps.filter(o => o.stage === 'won').length;
-    const conversionRate = total > 0 ? (won / total) * 100 : 0;
-    
-    // 按类型统计
-    const byType: Record<string, number> = { supply_demand: 0, bidding: 0, trade: 0, resource: 0 };
-    const byTypeAmount: Record<string, number> = { supply_demand: 0, bidding: 0, trade: 0, resource: 0 };
-    const byStage: Record<string, number> = { pending: 0, following: 0, proposal: 0, negotiation: 0, won: 0, lost: 0 };
-    
-    // 需要全量查询来计算分类统计
-    const allOpportunities = await prisma.opportunity.findMany({ where: { tenantId } });
-    allOpportunities.forEach(opp => {
-      if (byType[opp.type] !== undefined) byType[opp.type]++;
-      if (byTypeAmount[opp.type] !== undefined) byTypeAmount[opp.type] += opp.amount;
-      if (byStage[opp.stage] !== undefined) byStage[opp.stage]++;
-    });
-    
-    success(res, { total, totalAmount, wonAmount, conversionRate, byType, byTypeAmount, byStage, recentOpps: allOpps.slice(0, 10) }, '商机看板数据获取成功');
-  } catch (error: any) {
-    fail(res, error.message);
-  }
-});
-
-// 线索统计
-router.get('/leads/stats', authorizeRole(['admin']), async (req: Request, res: Response) => {
-  try {
-    const tenantId = req.user!.tenantId;
-    const [total, newLeads, following, converted] = await Promise.all([
-      prisma.lead.count({ where: { tenantId } }),
-      prisma.lead.count({ where: { tenantId, status: 'new' } }),
-      prisma.lead.count({ where: { tenantId, status: 'following' } }),
-      prisma.lead.count({ where: { tenantId, status: 'won' } })
-    ]);
-    success(res, { total, new: newLeads, following, converted }, '线索统计获取成功');
   } catch (error: any) {
     fail(res, error.message);
   }
@@ -1084,22 +1098,6 @@ router.put('/customers/:id/note', authorizeRole(['admin']), async (req: Request,
       data: { note }
     });
     success(res, customer, '备注更新成功');
-  } catch (error: any) {
-    fail(res, error.message);
-  }
-});
-
-// 客户统计
-router.get('/customers/stats', authorizeRole(['admin']), async (req: Request, res: Response) => {
-  try {
-    const tenantId = req.user!.tenantId;
-    const [total, active, prospect, churned] = await Promise.all([
-      prisma.customer.count({ where: { tenantId } }),
-      prisma.customer.count({ where: { tenantId, stage: 'active' } }),
-      prisma.customer.count({ where: { tenantId, stage: 'prospect' } }),
-      prisma.customer.count({ where: { tenantId, stage: 'churned' } })
-    ]);
-    success(res, { total, active, prospect, churned }, '客户统计获取成功');
   } catch (error: any) {
     fail(res, error.message);
   }

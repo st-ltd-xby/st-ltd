@@ -80,14 +80,22 @@ const LeadManagement: React.FC = () => {
       if (values.tags && Array.isArray(values.tags)) {
         values.tags = values.tags.join(',');
       }
-      await axios.post(`${API_BASE}/leads`, values, { headers: getHeaders() });
-      message.success('线索创建成功');
-      setIsCreateModal(false);
-      form.resetFields();
-      fetchLeads(1);
-      fetchStats();
-    } catch (error) {
-      message.error('创建失败');
+      const res = await axios.post(`${API_BASE}/leads`, values, { headers: getHeaders() });
+      if (res.data.code === 0 || res.data.code === 200) {
+        message.success('线索创建成功');
+        setIsCreateModal(false);
+        form.resetFields();
+        fetchLeads(1);
+        fetchStats();
+      } else {
+        message.error(res.data.message || '创建失败');
+      }
+    } catch (error: any) {
+      if (error.errorFields) {
+        message.warning('请填写必填项');
+      } else {
+        message.error(error.response?.data?.message || '创建失败，请检查网络');
+      }
     }
   };
 
