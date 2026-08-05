@@ -21,6 +21,8 @@ import Promotion from './pages/promotion/Promotion';
 import Settings from './pages/settings/Settings';
 import PageViewer from './pages/PageViewer';
 import ShortLinkRedirect from './pages/ShortLinkRedirect';
+import CustomerRegister from './pages/CustomerRegister';
+import OpportunityTracker from './pages/OpportunityTracker';
 import { adminRoutes } from './routes/adminRoutes';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -54,6 +56,10 @@ export default function App() {
           <Route path="/p/:slug" element={<PageViewer />} />
           {/* 短链跳转路由（无需登录） */}
           <Route path="/t/:shortCode" element={<ShortLinkRedirect />} />
+          {/* 客户自助注册（无需登录） */}
+          <Route path="/customer-register" element={<CustomerRegister />} />
+          {/* 商机进度追踪（无需登录） */}
+          <Route path="/track/:token" element={<OpportunityTracker />} />
           {/* 后端管理路由 */}
           {adminRoutes.map((route, index) => (
             <Route key={index} path={route.path} element={route.element}>

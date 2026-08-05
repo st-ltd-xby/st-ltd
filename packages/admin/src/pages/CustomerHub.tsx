@@ -172,7 +172,20 @@ const CustomerHub: React.FC = () => {
   const stageColors: Record<string, string> = { prospect: 'orange', active: 'green', churned: 'red' };
   const stageLabels: Record<string, string> = { prospect: '潜在客户', active: '活跃客户', churned: '流失客户' };
   const sourceLabels: Record<string, string> = {
-    promotion: '推广链接', website: '官网', form: '表单', manual: '手动录入', baidu: '百度', wechat: '微信', other: '其他'
+    promotion: '推广链接', website: '官网', form: '表单转化', manual: '手动录入',
+    baidu: '百度', wechat: '微信', auto: '自动采集', other: '其他'
+  };
+
+  // 区分注册来源
+  const getRegSource = (customer: any): string => {
+    if (customer.tags?.includes('自助注册')) return '自助注册';
+    if (customer.lead) return sourceLabels[customer.lead.source] || '表单转化';
+    return '手动创建';
+  };
+  const getRegSourceColor = (customer: any): string => {
+    if (customer.tags?.includes('自助注册')) return 'cyan';
+    if (customer.lead) return 'green';
+    return 'default';
   };
 
   const columns = [
@@ -206,11 +219,10 @@ const CustomerHub: React.FC = () => {
     },
     {
       title: '来源',
-      dataIndex: 'lead',
-      key: 'source',
+      key: 'regSource',
       width: 100,
-      render: (lead: any) => (
-        <Tag>{lead?.source ? sourceLabels[lead.source] || lead.source : '手动录入'}</Tag>
+      render: (_: any, record: any) => (
+        <Tag color={getRegSourceColor(record)}>{getRegSource(record)}</Tag>
       ),
     },
     {

@@ -2709,7 +2709,8 @@ router.get('/form-submissions', async (req: Request, res: Response) => {
 // 提交表单
 router.post('/forms/:id/submit', async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const idRaw = req.params.id;
+    const id = Array.isArray(idRaw) ? idRaw[0] : idRaw;
     const formData = req.body;
     
     // 验证表单是否存在且处于活动状态
@@ -2756,6 +2757,31 @@ router.post('/forms/:id/submit', async (req: Request, res: Response) => {
       where: { id: formConfig.id },
       data: { value: JSON.stringify(formDataParsed) },
     });
+    
+    // 自动创建线索（从表单数据提取）
+    const leadName = formData.name || formData.contactName || formData['姓名'] || '';
+    const leadPhone = formData.phone || formData.contactPhone || formData['手机'] || formData['电话'] || '';
+    const leadEmail = formData.email || formData.contactEmail || formData['邮箱'] || '';
+    const leadCompany = formData.company || formData['公司'] || '';
+    const leadMessage = formData.message || formData['留言'] || formData['需求'] || '';
+    
+    if (leadName || leadPhone || leadEmail) {
+      await prisma.lead.create({
+        data: {
+          tenantId: req.user!.tenantId,
+          name: leadName || leadPhone || leadEmail || '匿名访客',
+          phone: leadPhone || null,
+          email: leadEmail || null,
+          company: leadCompany || null,
+          source: 'form',
+          sourceId: formId,
+          status: 'new',
+          priority: 'medium',
+          tags: '',
+          note: leadMessage || `通过表单 ${formId} 提交`,
+        },
+      });
+    }
     
     success(res, { id: submissionId }, '表单提交成功');
   } catch (error: any) {

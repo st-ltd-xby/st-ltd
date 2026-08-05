@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Typography, Spin, Result, Button } from 'antd';
-import { ArrowLeftOutlined, PictureOutlined, PhoneOutlined, MailOutlined, UserOutlined } from '@ant-design/icons';
+import { Typography, Spin, Result, Button, Form, Input, message } from 'antd';
+import { ArrowLeftOutlined, PictureOutlined, PhoneOutlined, MailOutlined, UserOutlined, SendOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
 
@@ -28,8 +28,80 @@ function ImageComponent({ props }: { props: any }) {
   return <img src={resolvedUrl} alt={props.alt} style={{ width: props.width, height: props.height, borderRadius: props.borderRadius, display: 'block', margin: '12px 0' }} onError={() => setImgError(true)} />;
 }
 
+// 表单提交组件
+function FormBlock({ props: formProps, fields }: { props: any; fields: any[] }) {
+  const [submitting, setSubmitting] = useState(false);
+  const [form] = Form.useForm();
+
+  const handleSubmit = async (values: any) => {
+    setSubmitting(true);
+    try {
+      await axios.post(`${API_BASE_URL}/api/v1/public/form-submit`, {
+        formId: formProps.formId || formProps.id || 'embedded',
+        tenantId: formProps.tenantId || 'test-tenant-001',
+        name: values.name || values.姓名 || '',
+        phone: values.phone || values.电话 || values.手机 || '',
+        email: values.email || values.邮箱 || '',
+        company: values.company || values.公司 || '',
+        message: values.message || values.留言 || values.需求 || '',
+      });
+      message.success('提交成功，我们会尽快联系您！');
+      form.resetFields();
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || '提交失败，请稍后重试');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // 根据 fields 配置渲染表单项
+  const fieldLabelMap: Record<string, { label: string; name: string; type: string; required: boolean }> = {
+    'name': { label: '姓名', name: 'name', type: 'text', required: true },
+    '姓名': { label: '姓名', name: 'name', type: 'text', required: true },
+    'phone': { label: '电话', name: 'phone', type: 'text', required: false },
+    '电话': { label: '电话', name: 'phone', type: 'text', required: false },
+    '手机': { label: '手机', name: 'phone', type: 'text', required: false },
+    'email': { label: '邮箱', name: 'email', type: 'email', required: false },
+    '邮箱': { label: '邮箱', name: 'email', type: 'email', required: false },
+    'company': { label: '公司', name: 'company', type: 'text', required: false },
+    '公司': { label: '公司', name: 'company', type: 'text', required: false },
+    'message': { label: '留言', name: 'message', type: 'textarea', required: false },
+    '留言': { label: '留言', name: 'message', type: 'textarea', required: false },
+    '需求': { label: '需求描述', name: 'message', type: 'textarea', required: false },
+  };
+
+  const renderFields = fields.map((f: any) => {
+    const fieldName = typeof f === 'string' ? f : (f.name || f.field || '');
+    const mapped = fieldLabelMap[fieldName] || { label: fieldName, name: fieldName, type: 'text', required: false };
+    return { ...mapped, ...f, label: mapped.label, name: mapped.name };
+  });
+
+  return (
+    <div style={{ background: '#f8faff', padding: 24, borderRadius: 8, border: '1px solid #e8f0fe', margin: '16px 0' }}>
+      {formProps.title && <Title level={4} style={{ marginTop: 0, marginBottom: 16 }}>{formProps.title}</Title>}
+      {formProps.description && <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>{formProps.description}</Text>}
+      <Form form={form} onFinish={handleSubmit} layout="vertical" size="middle">
+        {renderFields.map((field: any, idx: number) => (
+          <Form.Item key={idx} name={field.name} label={field.label} rules={field.required ? [{ required: true, message: `请输入${field.label}` }] : []}>
+            {field.type === 'textarea' ? (
+              <Input.TextArea rows={3} placeholder={`请输入${field.label}`} />
+            ) : (
+              <Input placeholder={`请输入${field.label}`} />
+            )}
+          </Form.Item>
+        ))}
+        <Form.Item style={{ marginBottom: 0 }}>
+          <Button type="primary" htmlType="submit" loading={submitting} icon={<SendOutlined />}>
+            {formProps.buttonText || '提交'}
+          </Button>
+        </Form.Item>
+      </Form>
+    </div>
+  );
+}
+
 // 组件渲染（与PageBuilder一致）
-function RenderPageComponent({ comp }: { comp: any }) {
+function RenderPageComponent({ comp, tenantId }: { comp: any; tenantId?: string }) {
   const { type, props } = comp;
 
   switch (type) {
@@ -77,22 +149,7 @@ function RenderPageComponent({ comp }: { comp: any }) {
       const formFields = Array.isArray(props.fields)
         ? props.fields
         : (props.fields || '').split(',').map((f: string) => ({ name: f.trim(), type: 'text', required: true }));
-      return (
-        <div style={{ border: '1px solid #f0f0f0', borderRadius: 8, padding: 24, margin: '12px 0' }}>
-          <Title level={4} style={{ marginTop: 0 }}>{props.title}</Title>
-          {formFields.map((f: any, i: number) => (
-            <div key={i} style={{ marginBottom: 16 }}>
-              <Text strong style={{ display: 'block', marginBottom: 4 }}>{f.name || f}</Text>
-              {f.type === 'textarea' ? (
-                <textarea style={{ width: '100%', padding: '8px 12px', border: '1px solid #d9d9d9', borderRadius: 6, fontSize: 14, minHeight: 80 }} />
-              ) : (
-                <input type={f.type === 'tel' ? 'tel' : f.type === 'email' ? 'email' : 'text'} style={{ width: '100%', padding: '8px 12px', border: '1px solid #d9d9d9', borderRadius: 6, fontSize: 14 }} />
-              )}
-            </div>
-          ))}
-          <Button type="primary" block size="large">{props.submitText || '提交'}</Button>
-        </div>
-      );
+      return <FormBlock props={{ ...props, tenantId }} fields={formFields} />;
     }
     case 'contact':
       return (
@@ -227,7 +284,7 @@ export default function PageViewer() {
             </div>
           ) : (
             components.map((comp) => (
-              <RenderPageComponent key={comp.id} comp={comp} />
+              <RenderPageComponent key={comp.id} comp={comp} tenantId={page.tenantId} />
             ))
           )}
         </div>

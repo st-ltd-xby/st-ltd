@@ -161,9 +161,9 @@ const LeadManagement: React.FC = () => {
     opportunity: '商机', won: '已成交', lost: '已流失'
   };
   const sourceLabels: Record<string, string> = {
+    promotion: '推广链接', website: '官网', form: '表单提交', manual: '手动录入',
     baidu: '百度', douyin: '抖音', wechat: '微信', xiaohongshu: '小红书',
-    card: '名片', form: '表单', referral: '转介绍', auto: '自动采集',
-    website: '官网', other: '其他'
+    card: '名片', referral: '转介绍', auto: '自动采集', other: '其他'
   };
   const priorityColors: Record<string, string> = { low: 'default', medium: 'blue', high: 'red' };
 
