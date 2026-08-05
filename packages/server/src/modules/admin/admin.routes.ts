@@ -520,11 +520,11 @@ router.get('/customers', authorizeRole(['admin']), async (req: Request, res: Res
       ];
     }
     
-    if (level) {
+    if (level && level !== 'all') {
       whereConditions.level = level;
     }
     
-    if (stage) {
+    if (stage && stage !== 'all') {
       whereConditions.stage = stage;
     }
 
@@ -652,15 +652,15 @@ router.get('/leads', authorizeRole(['admin']), async (req: Request, res: Respons
       ];
     }
     
-    if (source) {
+    if (source && source !== 'all') {
       whereConditions.source = source;
     }
     
-    if (status) {
+    if (status && status !== 'all') {
       whereConditions.status = status;
     }
     
-    if (priority) {
+    if (priority && priority !== 'all') {
       whereConditions.priority = priority;
     }
 

@@ -81,6 +81,9 @@ const CustomerHub: React.FC = () => {
   const handleCreate = async () => {
     try {
       const values = await form.validateFields();
+      if (values.tags && Array.isArray(values.tags)) {
+        values.tags = values.tags.join(',');
+      }
       await axios.post(`${API_BASE}/customers`, values, { headers: getHeaders() });
       message.success('客户创建成功');
       setIsCreateModal(false);
@@ -96,6 +99,9 @@ const CustomerHub: React.FC = () => {
   const handleUpdate = async () => {
     try {
       const values = await form.validateFields();
+      if (values.tags && Array.isArray(values.tags)) {
+        values.tags = values.tags.join(',');
+      }
       await axios.put(`${API_BASE}/customers/${currentCustomer.id}`, values, { headers: getHeaders() });
       message.success('客户更新成功');
       setIsEditModal(false);
@@ -267,7 +273,11 @@ const CustomerHub: React.FC = () => {
           <Tooltip title="编辑">
             <Button type="link" size="small" icon={<EditOutlined />} onClick={() => {
               setCurrentCustomer(record);
-              form.setFieldsValue(record);
+              const editValues = { ...record };
+              if (editValues.tags && typeof editValues.tags === 'string') {
+                editValues.tags = editValues.tags.split(',').filter(Boolean);
+              }
+              form.setFieldsValue(editValues);
               setIsEditModal(true);
             }} />
           </Tooltip>
