@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Form, Input, Button, message, Typography, Select } from 'antd';
-import { BankOutlined, UserOutlined, PhoneOutlined, MailOutlined, EnvironmentOutlined, FileTextOutlined } from '@ant-design/icons';
+import { BankOutlined, UserOutlined, PhoneOutlined, MailOutlined, EnvironmentOutlined, FileTextOutlined, LoginOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
 
@@ -13,6 +14,7 @@ const INDUSTRIES = [
 ];
 
 export default function CustomerRegister() {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [form] = Form.useForm();
@@ -116,6 +118,22 @@ export default function CustomerRegister() {
           </div>
           <Title level={3} style={{ margin: 0, color: '#fff', fontSize: 22 }}>企业客户注册</Title>
           <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13 }}>填写信息，获取专属服务方案</Text>
+          <div style={{ marginTop: 16 }}>
+            <Button
+              type="default"
+              icon={<LoginOutlined />}
+              onClick={() => navigate('/login')}
+              style={{
+                background: 'rgba(0, 180, 255, 0.1)',
+                border: '1px solid rgba(0, 180, 255, 0.3)',
+                color: '#00b4ff',
+                borderRadius: 8,
+                fontSize: 13,
+              }}
+            >
+              已有账号？去登录
+            </Button>
+          </div>
         </div>
 
         <Form form={form} onFinish={onFinish} layout="vertical" size="large">
