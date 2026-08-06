@@ -49,7 +49,7 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument, {
 
 app.use('/api/v1/auth', authRoutes);
 // 管理员认证路由（必须在dashboardRoutes之前）
-app.use('/api/v1/auth', adminAuthRoutes);
+app.use('/api/v1/admin-auth', adminAuthRoutes);
 app.use('/api/v1/cms', cmsRoutes);
 app.use('/api/v1/scrm', scrmRoutes);
 app.use('/api/v1/content', contentRoutes);

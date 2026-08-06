@@ -2,7 +2,7 @@ import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
 
 const api = axios.create({
-  baseURL: (API_BASE_URL ? API_BASE_URL + '/api/v1' : '/api/v1'),
+  baseURL: API_BASE_URL ? API_BASE_URL : '/api/v1',
   timeout: 15000,
 });
 
