@@ -41,7 +41,7 @@ router.post('/leads', async (req: Request, res: Response) => {
   try {
     const { name, phone, email, company, position, source, priority, tags, note } = req.body;
     const lead = await prisma.lead.create({
-      data: { tenantId: req.user!.tenantId, name, phone, email, company, position, source: source || 'manual', priority, tags, note },
+      data: { tenantId: req.user!.tenantId, name, phone, email, company, position, source: source || 'manual', priority, tags: tags || '', note },
     });
     success(res, lead, '线索创建成功');
   } catch (error: any) {

@@ -93,25 +93,39 @@ router.post('/visitor/track', async (req: Request, res: Response) => {
           const page = await prisma.page.findFirst({ where: { slug: decodeURIComponent(slugMatch[1]) } });
           if (page) leadTenantId = page.tenantId;
         }
-        // 创建线索（来源：推广链接）
-        await prisma.lead.create({
-          data: {
-            tenantId: leadTenantId,
-            name: `推广访客-${promoCode}`,
-            source: 'promotion',
-            sourceId: trackingLink.id,
-            visitorId: visitor.id,
-            status: 'new',
-            priority: 'medium',
-            tags: '',
-            note: `通过推广短链 ${promoCode} 访问，目标: ${trackingLink.targetUrl}`,
-          },
+
+        // 解析UA获取设备/浏览器信息
+        const userAgent = ua || '';
+        const device = /Mobile|Android|iPhone|iPad/i.test(userAgent) ? '移动端' : 'PC端';
+        const browser = /Edg/i.test(userAgent) ? 'Edge' : /Chrome/i.test(userAgent) ? 'Chrome' : /Firefox/i.test(userAgent) ? 'Firefox' : /Safari/i.test(userAgent) ? 'Safari' : '未知';
+        const ip = req.ip || req.socket.remoteAddress || '';
+        const referrer = data?.referrer || '';
+
+        // 防重复：同一访客同一推广链接只创建一次线索
+        const existingLead = await prisma.lead.findFirst({
+          where: { tenantId: leadTenantId, visitorId: visitor.id, source: 'promotion', sourceId: trackingLink.id },
         });
-        // 更新追踪链接的线索计数
-        await prisma.trackingLink.update({
-          where: { id: trackingLink.id },
-          data: { leadCount: { increment: 1 } },
-        });
+
+        if (!existingLead) {
+          await prisma.lead.create({
+            data: {
+              tenantId: leadTenantId,
+              name: `推广访客-${promoCode}`,
+              source: 'promotion',
+              sourceId: trackingLink.id,
+              visitorId: visitor.id,
+              status: 'new',
+              priority: 'medium',
+              tags: '推广采集',
+              note: `推广短链: ${promoCode}\n设备: ${device} | 浏览器: ${browser}\nIP: ${ip}\n来源页: ${referrer || '直接访问'}\n目标页: ${trackingLink.targetUrl}`,
+            },
+          });
+          // 更新追踪链接的线索计数
+          await prisma.trackingLink.update({
+            where: { id: trackingLink.id },
+            data: { leadCount: { increment: 1 } },
+          });
+        }
       }
     }
 

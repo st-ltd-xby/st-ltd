@@ -21,6 +21,10 @@ export function useVisitorTrack(tenantId?: string) {
 
     const sessionId = 's_' + crypto.randomUUID().replace(/-/g, '').slice(0, 20);
 
+    // 检测推广短链参数
+    const urlParams = new URLSearchParams(location.search);
+    const promoCode = urlParams.get('promo') || undefined;
+
     // 发送 pageview 事件
     const payload = {
       tenantId,
@@ -37,6 +41,7 @@ export function useVisitorTrack(tenantId?: string) {
       screen: `${screen.width}x${screen.height}`,
       viewport: `${window.innerWidth}x${window.innerHeight}`,
       lang: navigator.language,
+      promoCode,
     };
 
     // 使用 sendBeacon 或 fetch 发送
