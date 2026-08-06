@@ -3,19 +3,19 @@ import { Table, Button, Tag, Space, Modal, Form, Input, Select, Tabs, message, T
 import { PlusOutlined } from '@ant-design/icons';
 import { scrmApi } from '../../services/api';
 const { Title } = Typography;
-
+// v2 - source labels fix
 const sourceLabels: Record<string, string> = {
-  baidu: '百度',
-  douyin: '抖音',
-  wechat: '微信',
-  xiaohongshu: '小红书',
-  card: '电子名片',
-  manual: '手动录入',
-  form: '表单转化',
-  promotion: '推广链接',
-  website: '官网',
-  auto: '自动采集',
-  other: '其他',
+  baidu: '\u767e\u5ea6',
+  douyin: '\u6296\u97f3',
+  wechat: '\u5fae\u4fe1',
+  xiaohongshu: '\u5c0f\u7ea2\u4e66',
+  card: '\u7535\u5b50\u540d\u7247',
+  manual: '\u624b\u52a8\u5f55\u5165',
+  form: '\u8868\u5355\u8f6c\u5316',
+  promotion: '\u63a8\u5e7f\u94fe\u63a5',
+  website: '\u5b98\u7f51',
+  auto: '\u81ea\u52a8\u91c7\u96c6',
+  other: '\u5176\u4ed6',
 };
 
 const sourceColors: Record<string, string> = {
@@ -81,7 +81,10 @@ export default function Leads() {
     {
       title: '来源',
       dataIndex: 'source',
-      render: (v: string) => <Tag color={sourceColors[v] || 'default'}>{sourceLabels[v] || v}</Tag>,
+      render: (v: string) => {
+        const label = sourceLabels[v] || v;
+        return <Tag color={sourceColors[v] || 'default'}>{label}</Tag>;
+      },
     },
     {
       title: '状态',

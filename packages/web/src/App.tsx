@@ -24,6 +24,7 @@ import ShortLinkRedirect from './pages/ShortLinkRedirect';
 import CustomerRegister from './pages/CustomerRegister';
 import OpportunityTracker from './pages/OpportunityTracker';
 import { adminRoutes } from './routes/adminRoutes';
+// build v2
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
