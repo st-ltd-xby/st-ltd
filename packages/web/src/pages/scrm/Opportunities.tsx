@@ -1,39 +1,149 @@
 import { useEffect, useState } from 'react';
-import { Card, Statistic, Row, Col, Typography, Empty } from 'antd';
+import { Table, Tag, Space, Button, Typography, message } from 'antd';
+import { EyeOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import { scrmApi } from '../../services/api';
 const { Title } = Typography;
+
+const stageLabels: Record<string, string> = {
+  pending: '待确认',
+  confirmed: '已确认',
+  in_progress: '跟进中',
+  proposal: '方案/报价',
+  negotiating: '谈判中',
+  won: '已成交',
+  lost: '已流失',
+};
+
+const stageColors: Record<string, string> = {
+  pending: 'default',
+  confirmed: 'blue',
+  in_progress: 'processing',
+  proposal: 'cyan',
+  negotiating: 'purple',
+  won: 'success',
+  lost: 'error',
+};
+
+const typeLabels: Record<string, string> = {
+  supply_demand: '供需信息',
+  bidding: '招投标',
+  trade: '买卖关系',
+  resource: '资源对接',
+};
+
+const priorityLabels: Record<string, string> = {
+  low: '低',
+  medium: '中',
+  high: '高',
+  urgent: '紧急',
+};
+
+const priorityColors: Record<string, string> = {
+  low: 'default',
+  medium: 'blue',
+  high: 'orange',
+  urgent: 'red',
+};
+
 export default function Opportunities() {
   const [opps, setOpps] = useState<any[]>([]);
-  useEffect(() => { scrmApi.getOpportunities().then((res: any) => { if (res.code === 0) setOpps(res.data || []); }).catch(() => {}); }, []);
-  const stages = [
-    { key: 'demand', label: '需求确认', color: '#1677ff' },
-    { key: 'proposal', label: '方案报价', color: '#faad14' },
-    { key: 'negotiation', label: '商务谈判', color: '#ff7a45' },
-    { key: 'won', label: '赢单', color: '#52c41a' },
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    loadOpportunities();
+  }, []);
+
+  const loadOpportunities = async () => {
+    setLoading(true);
+    try {
+      const res: any = await scrmApi.getOpportunities();
+      if (res.code === 0) {
+        setOpps(res.data || []);
+      } else {
+        message.error('加载失败');
+      }
+    } catch (err) {
+      message.error('网络错误');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const columns = [
+    {
+      title: '商机名称',
+      dataIndex: 'title',
+      key: 'title',
+      width: 200,
+      ellipsis: true,
+    },
+    {
+      title: '公司',
+      dataIndex: 'customerName',
+      key: 'customerName',
+      width: 150,
+      render: (text: string) => text || '-',
+    },
+    {
+      title: '商机来源',
+      dataIndex: 'type',
+      key: 'type',
+      width: 120,
+      render: (v: string) => <Tag>{typeLabels[v] || v}</Tag>,
+    },
+    {
+      title: '状态',
+      dataIndex: 'stage',
+      key: 'stage',
+      width: 100,
+      render: (v: string) => <Tag color={stageColors[v] || 'default'}>{stageLabels[v] || v}</Tag>,
+    },
+    {
+      title: '优先级',
+      dataIndex: 'priority',
+      key: 'priority',
+      width: 90,
+      render: (v: string) => <Tag color={priorityColors[v] || 'default'}>{priorityLabels[v] || v}</Tag>,
+    },
+    {
+      title: '联系方式',
+      key: 'contact',
+      width: 150,
+      render: (_: any, record: any) => {
+        const contact = record.contactPhone || record.contactEmail || '-';
+        return <span style={{ fontSize: 13 }}>{contact}</span>;
+      },
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 150,
+      fixed: 'right' as const,
+      render: (_: any, record: any) => (
+        <Space size="small">
+          <Button type="link" size="small" icon={<EyeOutlined />}>查看</Button>
+          <Button type="link" size="small" icon={<EditOutlined />}>编辑</Button>
+          <Button type="link" size="small" danger icon={<DeleteOutlined />}>删除</Button>
+        </Space>
+      ),
+    },
   ];
-  const totalAmount = opps.reduce((sum, o) => sum + (o.amount || 0), 0);
-  return (<div>
-    <Title level={4}>商机管理</Title>
-    <Row gutter={16} style={{ marginBottom: 16 }}>
-      <Col span={6}><Card><Statistic title="进行中商机" value={opps.length} /></Card></Col>
-      <Col span={6}><Card><Statistic title="预估总额" value={totalAmount} prefix="¥" /></Card></Col>
-      <Col span={6}><Card><Statistic title="本月成交" value={opps.filter(o => o.stage === 'won').length} valueStyle={{ color: '#52c41a' }} /></Card></Col>
-      <Col span={6}><Card><Statistic title="赢单率" value={opps.length ? Math.round(opps.filter(o => o.stage === 'won').length / opps.length * 100) : 0} suffix="%" /></Card></Col>
-    </Row>
-    <Row gutter={16}>
-      {stages.map(stage => (
-        <Col span={6} key={stage.key}>
-          <Card title={<span>{stage.label} ({opps.filter(o => o.stage === stage.key).length})</span>} size="small">
-            {opps.filter(o => o.stage === stage.key).length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无" /> :
-              opps.filter(o => o.stage === stage.key).map(o => (
-                <Card key={o.id} size="small" style={{ marginBottom: 8, borderLeft: `3px solid ${stage.color}` }}>
-                  <div style={{ fontWeight: 500 }}>{o.title}</div>
-                  <div style={{ fontSize: 12, color: '#666' }}>¥{o.amount?.toLocaleString()}</div>
-                </Card>
-              ))}
-          </Card>
-        </Col>
-      ))}
-    </Row>
-  </div>);
+
+  return (
+    <div>
+      <Title level={4}>商机管理</Title>
+      <Table
+        columns={columns}
+        dataSource={opps}
+        rowKey="id"
+        loading={loading}
+        scroll={{ x: 1200 }}
+        pagination={{
+          pageSize: 10,
+          showSizeChanger: true,
+          showTotal: (total) => `共 ${total} 条`,
+        }}
+      />
+    </div>
+  );
 }
