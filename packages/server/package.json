@@ -11,6 +11,9 @@
     "db:seed": "tsx prisma/seed.ts",
     "lint": "eslint src/"
   },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
   "dependencies": {
     "@prisma/client": "^5.22.0",
     "axios": "^1.18.1",

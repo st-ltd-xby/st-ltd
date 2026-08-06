@@ -3,6 +3,7 @@ export async function onRequest(context) {
   const url = new URL(request.url);
   const backendUrl = 'https://st-ltd-api-production.up.railway.app' + url.pathname + url.search;
 
+  // 处理预检请求
   if (request.method === 'OPTIONS') {
     return new Response(null, {
       status: 204,
@@ -14,6 +15,7 @@ export async function onRequest(context) {
     });
   }
 
+  // 复制请求头并移除可能冲突的头
   const headers = new Headers(request.headers);
   headers.delete('host');
   headers.delete('origin');
@@ -23,6 +25,7 @@ export async function onRequest(context) {
   headers.delete('cf-visitor');
 
   try {
+    // 确保正确处理各种请求方法，包括 POST
     const response = await fetch(backendUrl, {
       method: request.method,
       headers: headers,

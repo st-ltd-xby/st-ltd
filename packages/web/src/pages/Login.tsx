@@ -15,7 +15,16 @@ export default function Login() {
   const onFinish = async (values: any) => {
     setLoading(true);
     try {
-      const res: any = await authApi.login(values);
+      // 首先尝试普通用户登录
+      let res: any;
+      try {
+        res = await authApi.login(values);
+      } catch (normalLoginErr) {
+        // 如果普通登录失败，尝试管理员登录
+        console.log('普通登录失败，尝试管理员登录');
+        res = await authApi.adminLogin(values);
+      }
+      
       if (res.code === 0) {
         setAuth(res.data.token, res.data.user, res.data.tenant);
         message.success('登录成功');
@@ -107,7 +116,7 @@ export default function Login() {
           <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13 }}>Lead to Deal · 从引导到交易</Text>
         </div>
         <Form onFinish={onFinish} size="large">
-          <Form.Item name="email" rules={[{ required: true, message: '请输入邮箱' }, { type: 'email', message: '邮箱格式不正确' }]}>
+          <Form.Item name="email" rules={[{ required: true, message: '请输入邮箱' }]}>
             <Input
               prefix={<UserOutlined style={{ color: 'rgba(0, 180, 255, 0.6)' }} />}
               placeholder="邮箱"

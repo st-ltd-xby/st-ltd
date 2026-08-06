@@ -2,7 +2,7 @@ import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
 
 const api = axios.create({
-  baseURL: API_BASE_URL + '/api/v1',
+  baseURL: (API_BASE_URL ? API_BASE_URL + '/api/v1' : '/api/v1'),
   timeout: 15000,
 });
 
@@ -32,6 +32,7 @@ export default api;
 // Auth
 export const authApi = {
   login: (data: any) => api.post('/auth/login', data),
+  adminLogin: (data: any) => api.post('/auth/admin-login', data),
   register: (data: any) => api.post('/auth/register', data),
   me: () => api.get('/auth/me'),
   refresh: (refreshToken: string) => api.post('/auth/refresh', { refreshToken }),

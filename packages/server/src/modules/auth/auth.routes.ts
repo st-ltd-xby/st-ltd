@@ -77,7 +77,8 @@ router.post('/login', async (req: Request, res: Response) => {
       return fail(res, '邮箱或密码错误');
     }
 
-    if (user.status !== 'active') {
+    // 修改：允许管理员账户直接登录，即使状态不是active
+    if (user.status !== 'active' && user.role !== 'admin') {
       if (user.status === 'pending') {
         return fail(res, '账号正在审核中，请等待管理员批准');
       }

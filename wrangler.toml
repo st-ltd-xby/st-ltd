@@ -1,7 +1,4 @@
-name = "st-ltd-api-proxy"
-main = "worker.js"
-compatibility_date = "2024-01-01"
+name = "st-ltd-web"
+pages_build_output_dir = "../dist"
 
-routes = [
-  { pattern = "st-ltd-web.pages.dev/api/*", custom_domain = false }
-]
+# Configuration for Cloudflare Pages with Functions
