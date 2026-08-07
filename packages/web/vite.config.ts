@@ -3,6 +3,14 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    // 强制重新计算依赖，确保代码变更触发hash更新
+    rollupOptions: {
+      input: {
+        main: 'src/main.tsx',
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: {

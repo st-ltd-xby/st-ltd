@@ -7,7 +7,7 @@ import { useAuthStore } from '../stores/authStore';
 
 const { Title, Text } = Typography;
 
-export default function Login() {
+export default function Login() { // API配置已更新为直接访问Railway后端
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const setAuth = useAuthStore((s) => s.setAuth);
