@@ -8,7 +8,9 @@ export async function autoSeed() {
     // 检查是否已有数据
     const tenantCount = await prisma.tenant.count();
     if (tenantCount > 0) {
-      console.log(' 数据库已有数据，跳过初始化');
+      console.log('✅ 数据库已有数据，跳过初始化');
+      // 即使已有数据，也确保管理员账号存在
+      await ensureAdminExists();
       return;
     }
 
@@ -115,10 +117,49 @@ export async function autoSeed() {
       },
     });
 
-    console.log(' 初始化完成！');
-    console.log(' 管理员: admin@ltd.com / admin123');
-    console.log(' 员工: zhangsan@ltd.com / employee123');
+    console.log('✅ 初始化完成！');
+    console.log('📋 管理员: admin@ltd.com / admin123');
+    console.log('📋 员工: zhangsan@ltd.com / employee123');
   } catch (error) {
-    console.error(' 初始化失败:', error);
+    console.error('❌ 初始化失败:', error);
+  }
+}
+
+// 确保管理员账号始终存在（防止数据库重置后丢失）
+async function ensureAdminExists() {
+  try {
+    const admin = await prisma.user.findUnique({ where: { id: 'test-admin-001' } });
+    const password = await bcrypt.hash('admin123', 10);
+    
+    if (!admin) {
+      // 管理员不存在，创建
+      const tenant = await prisma.tenant.findFirst();
+      if (tenant) {
+        await prisma.user.create({
+          data: {
+            id: 'test-admin-001',
+            tenantId: tenant.id,
+            email: 'admin@ltd.com',
+            password,
+            name: '管理员',
+            phone: '13800138000',
+            role: 'admin',
+            status: 'active',
+          },
+        });
+        console.log('✅ 管理员账号已自动恢复: admin@ltd.com / admin123');
+      }
+    } else {
+      // 管理员存在，但确保密码正确和状态正常
+      if (admin.status !== 'active' || !(await bcrypt.compare('admin123', admin.password))) {
+        await prisma.user.update({
+          where: { id: 'test-admin-001' },
+          data: { password, status: 'active' },
+        });
+        console.log('✅ 管理员密码已同步更新: admin@ltd.com / admin123');
+      }
+    }
+  } catch (error) {
+    console.error('恢复管理员账号失败:', error);
   }
 }
