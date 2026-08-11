@@ -4,6 +4,6 @@ COPY packages/server/package.json packages/server/package-lock.json* ./packages/
 RUN cd packages/server && npm install --omit=dev
 COPY packages/server/ ./packages/server/
 COPY packages/server/prisma/ ./packages/server/prisma/
-RUN cd packages/server && npx prisma generate
+RUN cd packages/server && npx prisma@5.22.0 generate
 EXPOSE 8080
-CMD cd packages/server && npx prisma db push --skip-generate && node dist/app.js
+CMD cd packages/server && npx prisma@5.22.0 db push --skip-generate && node dist/app.js
