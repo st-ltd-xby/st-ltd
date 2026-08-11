@@ -1,4 +1,5 @@
-FROM node:20
+FROM node:20-alpine
+RUN apk add --no-cache openssl
 WORKDIR /app
 COPY packages/server/package.json packages/server/package-lock.json* ./packages/server/
 RUN cd packages/server && npm install --omit=dev
