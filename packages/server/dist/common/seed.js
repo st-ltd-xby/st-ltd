@@ -143,36 +143,35 @@ async function autoSeed() {
 // 确保管理员账号始终存在（防止数据库重置后丢失）
 async function ensureAdminExists() {
     try {
-        const admin = await prisma.user.findUnique({ where: { id: 'test-admin-001' } });
         const password = await bcrypt.hash('admin123', 10);
+        const tenant = await prisma.tenant.findFirst();
+        if (!tenant) {
+            console.error('⚠️ 无租户数据，无法创建管理员');
+            return;
+        }
+        const admin = await prisma.user.findUnique({ where: { id: 'test-admin-001' } });
         if (!admin) {
-            // 管理员不存在，创建
-            const tenant = await prisma.tenant.findFirst();
-            if (tenant) {
-                await prisma.user.create({
-                    data: {
-                        id: 'test-admin-001',
-                        tenantId: tenant.id,
-                        email: 'admin@ltd.com',
-                        password,
-                        name: '管理员',
-                        phone: '13800138000',
-                        role: 'admin',
-                        status: 'active',
-                    },
-                });
-                console.log('✅ 管理员账号已自动恢复: admin@ltd.com / admin123');
-            }
+            await prisma.user.create({
+                data: {
+                    id: 'test-admin-001',
+                    tenantId: tenant.id,
+                    email: 'admin@ltd.com',
+                    password,
+                    name: '管理员',
+                    phone: '13800138000',
+                    role: 'admin',
+                    status: 'active',
+                },
+            });
+            console.log('✅ 管理员账号已创建: admin@ltd.com / admin123');
         }
         else {
-            // 管理员存在，但确保密码正确和状态正常
-            if (admin.status !== 'active' || !(await bcrypt.compare('admin123', admin.password))) {
-                await prisma.user.update({
-                    where: { id: 'test-admin-001' },
-                    data: { password, status: 'active' },
-                });
-                console.log('✅ 管理员密码已同步更新: admin@ltd.com / admin123');
-            }
+            // 强制更新密码和状态，确保一定能登录
+            await prisma.user.update({
+                where: { id: 'test-admin-001' },
+                data: { password, status: 'active', email: 'admin@ltd.com', role: 'admin' },
+            });
+            console.log('✅ 管理员密码已强制同步: admin@ltd.com / admin123');
         }
     }
     catch (error) {
