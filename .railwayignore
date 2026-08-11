@@ -11,10 +11,6 @@ fc-flat
 *.py
 *.sh
 *.mjs
-*.js
-!fc-handler.js
-!worker.js
-!packages/server/dist/**/*.js
 test-*
 verify-*
 screenshot-*
