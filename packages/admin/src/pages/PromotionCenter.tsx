@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { 
   Card, Table, Button, Space, Modal, message, Tag, 
-  Tabs, Statistic, Row, Col, Typography, Empty, Progress, Divider
+  Tabs, Statistic, Row, Col, Typography, Empty, Progress, Divider,
+  Form, Input, Select, Switch, InputNumber, Popconfirm, Alert
 } from 'antd';
 import { 
   QrcodeOutlined, FileTextOutlined, EyeOutlined,
   EditOutlined, AppstoreOutlined, LinkOutlined,
   CopyOutlined, CheckCircleOutlined, WarningOutlined,
-  RocketOutlined
+  RocketOutlined, PlusOutlined, DeleteOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
@@ -68,6 +69,13 @@ const PromotionCenter: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [seoFixModal, setSeoFixModal] = useState<any>(null);
   const [qrModal, setQrModal] = useState<any>(null);
+  // SEO 策略状态
+  const [strategies, setStrategies] = useState<any[]>([]);
+  const [strategyLoading, setStrategyLoading] = useState(false);
+  const [strategyModal, setStrategyModal] = useState<any>(null);
+  const [strategyForm] = Form.useForm();
+  const [ruleForm] = Form.useForm();
+  const [currentRules, setCurrentRules] = useState<any[]>([]);
 
   // 获取推广数据
   const fetchData = async () => {
@@ -88,7 +96,77 @@ const PromotionCenter: React.FC = () => {
     finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); fetchStrategies(); }, []);
+
+  // 获取 SEO 策略
+  const fetchStrategies = async () => {
+    setStrategyLoading(true);
+    try {
+      const res = await axios.get(`${PROMOTION_API}/seo/strategies`, getToken());
+      if (res.data.code === 0) setStrategies(res.data.data || []);
+    } catch {}
+    setStrategyLoading(false);
+  };
+
+  // 保存策略
+  const handleSaveStrategy = async (values: any) => {
+    try {
+      const data = { ...values, rules: currentRules };
+      if (strategyModal?.id) {
+        const res = await axios.put(`${PROMOTION_API}/seo/strategies/${strategyModal.id}`, data, getToken());
+        if (res.data.code === 0) { message.success('策略更新成功'); setStrategyModal(null); strategyForm.resetFields(); setCurrentRules([]); fetchStrategies(); }
+        else message.error(res.data.message || '保存失败');
+      } else {
+        const res = await axios.post(`${PROMOTION_API}/seo/strategies`, data, getToken());
+        if (res.data.code === 0) { message.success('策略创建成功'); setStrategyModal(null); strategyForm.resetFields(); setCurrentRules([]); fetchStrategies(); }
+        else message.error(res.data.message || '创建失败');
+      }
+    } catch { message.error('操作失败'); }
+  };
+
+  // 删除策略
+  const handleDeleteStrategy = async (id: string) => {
+    try {
+      const res = await axios.delete(`${PROMOTION_API}/seo/strategies/${id}`, getToken());
+      if (res.data.code === 0) { message.success('策略已删除'); fetchStrategies(); }
+      else message.error(res.data.message || '删除失败');
+    } catch { message.error('删除失败'); }
+  };
+
+  // 添加规则
+  const handleAddRule = async (values: any) => {
+    const newRules = [...currentRules, values];
+    setCurrentRules(newRules);
+    ruleForm.resetFields();
+  };
+
+  // 删除规则
+  const handleRemoveRule = (index: number) => {
+    setCurrentRules(currentRules.filter((_, i) => i !== index));
+  };
+
+  // 编辑策略
+  const handleEditStrategy = (record: any) => {
+    let rules: any[] = [];
+    try { rules = typeof record.rules === 'string' ? JSON.parse(record.rules) : record.rules; } catch {}
+    setCurrentRules(rules);
+    strategyForm.setFieldsValue({
+      name: record.name,
+      description: record.description,
+      target: record.target,
+      isActive: record.isActive,
+      sortOrder: record.sortOrder,
+    });
+    setStrategyModal(record);
+  };
+
+  // 新建策略
+  const handleAddStrategy = () => {
+    setCurrentRules([]);
+    strategyForm.resetFields();
+    strategyForm.setFieldsValue({ target: 'page', isActive: true, sortOrder: 0 });
+    setStrategyModal({});
+  };
 
   // 合并站点和页面
   const allItems = [
@@ -239,6 +317,36 @@ const PromotionCenter: React.FC = () => {
     );
   };
 
+  // ============ SEO策略管理 Tab ============
+  const renderSeoStrategyTab = () => {
+    const columns = [
+      { title: '策略名称', dataIndex: 'name', render: (v: string) => <Text strong>{v}</Text> },
+      { title: '描述', dataIndex: 'description', ellipsis: true },
+      { title: '目标', dataIndex: 'target', width: 80, render: (v: string) => <Tag color={v === 'site' ? 'blue' : 'green'}>{v === 'site' ? '站点' : '页面'}</Tag> },
+      { title: '规则数', width: 80, render: (_: any, r: any) => {
+        try { const rules = typeof r.rules === 'string' ? JSON.parse(r.rules) : r.rules; return <Tag>{Array.isArray(rules) ? rules.length : 0} 条</Tag>; } catch { return <Tag>0 条</Tag>; }
+      }},
+      { title: '状态', dataIndex: 'isActive', width: 80, render: (v: boolean) => <Tag color={v ? 'green' : 'default'}>{v ? '启用' : '禁用'}</Tag> },
+      { title: '排序', dataIndex: 'sortOrder', width: 60 },
+      { title: '操作', width: 150, render: (_: any, record: any) => (
+        <Space size="small">
+          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleEditStrategy(record)}>编辑</Button>
+          <Popconfirm title="确定删除此策略？" onConfirm={() => handleDeleteStrategy(record.id)}>
+            <Button type="link" size="small" danger icon={<DeleteOutlined />}>删除</Button>
+          </Popconfirm>
+        </Space>
+      )},
+    ];
+    return (
+      <>
+        <Alert message="SEO策略用于指导前端“一键修复”功能的行为。创建策略后，前端推广工具的SEO模块会按照策略规则执行修复，而不是随机修复。" type="info" showIcon style={{ marginBottom: 16 }} />
+        <Card title="SEO优化策略列表" extra={<Button type="primary" icon={<PlusOutlined />} onClick={handleAddStrategy}>新建策略</Button>}>
+          <Table dataSource={strategies} rowKey="id" loading={strategyLoading} columns={columns} pagination={{ pageSize: 10 }} />
+        </Card>
+      </>
+    );
+  };
+
   return (
     <div>
       <Card>
@@ -246,6 +354,7 @@ const PromotionCenter: React.FC = () => {
           <TabPane tab="页面推广" key="promotion">{renderPromotionTab()}</TabPane>
           <TabPane tab="追踪链接" key="tracking">{renderTrackingTab()}</TabPane>
           <TabPane tab="SEO优化" key="seo">{renderSeoTab()}</TabPane>
+          <TabPane tab="SEO策略管理" key="seo-strategy">{renderSeoStrategyTab()}</TabPane>
         </Tabs>
       </Card>
 
@@ -273,11 +382,106 @@ const PromotionCenter: React.FC = () => {
         })()}
       </Modal>
 
+      {/* SEO策略编辑弹窗 */}
+      <Modal
+        title={strategyModal?.id ? '编辑SEO策略' : '新建SEO策略'}
+        open={!!strategyModal}
+        onCancel={() => { setStrategyModal(null); strategyForm.resetFields(); setCurrentRules([]); }}
+        onOk={() => strategyForm.submit()}
+        width={700}
+        destroyOnClose
+      >
+        <Form form={strategyForm} onFinish={handleSaveStrategy} layout="vertical">
+          <Form.Item name="name" label="策略名称" rules={[{ required: true, message: '请输入策略名称' }]}>
+            <Input placeholder="例如：页面SEO标题自动优化" />
+          </Form.Item>
+          <Form.Item name="description" label="策略描述">
+            <Input.TextArea rows={2} placeholder="描述此策略的作用" />
+          </Form.Item>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item name="target" label="目标类型" rules={[{ required: true }]}>
+                <Select>
+                  <Select.Option value="site">站点</Select.Option>
+                  <Select.Option value="page">页面</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="sortOrder" label="执行顺序">
+                <InputNumber min={0} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="isActive" label="启用" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Divider>规则配置</Divider>
+          {currentRules.length > 0 && (
+            <Table
+              size="small"
+              dataSource={currentRules}
+              rowKey={(_, i) => String(i)}
+              pagination={false}
+              style={{ marginBottom: 16 }}
+              columns={[
+                { title: '字段', dataIndex: 'field', width: 100, render: (v: string) => <Tag>{({seoTitle:'SEO标题',seoDesc:'SEO描述',seoKeywords:'关键词',title:'标题',slug:'路径',status:'状态'} as any)[v] || v}</Tag> },
+                { title: '条件', dataIndex: 'condition', width: 80, render: (v: string) => <Tag color="orange">{({empty:'为空',short:'过短',missing:'缺失'} as any)[v] || v}</Tag> },
+                { title: '操作', dataIndex: 'action', width: 80, render: (v: string) => <Tag color="blue">{({fill:'填充',append:'追加',replace:'替换'} as any)[v] || v}</Tag> },
+                { title: '模板', dataIndex: 'template', ellipsis: true, render: (v: string) => <Text type="secondary" style={{ fontSize: 12 }}>{v || '-'}</Text> },
+                { title: '', width: 50, render: (_: any, __: any, index: number) => <Button type="link" danger size="small" icon={<DeleteOutlined />} onClick={() => handleRemoveRule(index)} /> },
+              ]}
+            />
+          )}
+          <Card size="small" title="添加规则" style={{ background: '#fafafa' }}>
+            <Form form={ruleForm} onFinish={handleAddRule} layout="inline" style={{ flexWrap: 'wrap', gap: 8 }}>
+              <Form.Item name="field" rules={[{ required: true, message: '必填' }]} style={{ marginBottom: 8 }}>
+                <Select placeholder="字段" style={{ width: 110 }}>
+                  <Select.Option value="seoTitle">SEO标题</Select.Option>
+                  <Select.Option value="seoDesc">SEO描述</Select.Option>
+                  <Select.Option value="seoKeywords">SEO关键词</Select.Option>
+                  <Select.Option value="title">标题</Select.Option>
+                  <Select.Option value="slug">路径</Select.Option>
+                </Select>
+              </Form.Item>
+              <Form.Item name="condition" rules={[{ required: true, message: '必填' }]} style={{ marginBottom: 8 }}>
+                <Select placeholder="条件" style={{ width: 90 }}>
+                  <Select.Option value="empty">为空</Select.Option>
+                  <Select.Option value="short">过短</Select.Option>
+                  <Select.Option value="missing">缺失</Select.Option>
+                </Select>
+              </Form.Item>
+              <Form.Item name="action" rules={[{ required: true, message: '必填' }]} style={{ marginBottom: 8 }}>
+                <Select placeholder="操作" style={{ width: 90 }}>
+                  <Select.Option value="fill">填充</Select.Option>
+                  <Select.Option value="append">追加</Select.Option>
+                  <Select.Option value="replace">替换</Select.Option>
+                </Select>
+              </Form.Item>
+              <Form.Item name="template" style={{ marginBottom: 8 }}>
+                <Input placeholder="模板，如 {pageTitle} - {siteName}" style={{ width: 200 }} />
+              </Form.Item>
+              <Form.Item name="minLength" style={{ marginBottom: 8 }}>
+                <InputNumber placeholder="最小长度" min={1} style={{ width: 100 }} />
+              </Form.Item>
+              <Form.Item style={{ marginBottom: 8 }}>
+                <Button type="primary" htmlType="submit" size="small" icon={<PlusOutlined />}>添加</Button>
+              </Form.Item>
+            </Form>
+            <div style={{ marginTop: 8, fontSize: 12, color: '#999' }}>
+              模板变量：&#123;siteName&#125; = 站点名称，&#123;siteDomain&#125; = 域名，&#123;pageTitle&#125; = 页面标题
+            </div>
+          </Card>
+        </Form>
+      </Modal>
+
       {/* 二维码弹窗 */}
       <Modal title={qrModal?.title || '二维码'} open={!!qrModal} onCancel={() => setQrModal(null)} footer={null}>
         {qrModal && (
           <div style={{ textAlign: 'center', padding: 20 }}>
-            <AntQR value={qrModal.url} size={200} />
+            <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrModal.url)}`} alt="QR Code" width={200} height={200} />
             <div style={{ marginTop: 12 }}>
               <Text copyable style={{ color: '#1677ff' }}>{qrModal.url}</Text>
             </div>

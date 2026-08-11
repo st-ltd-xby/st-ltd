@@ -148,16 +148,15 @@ const AdminDashboard: React.FC = () => {
             <Row gutter={16}>
               <Col span={12}>
                 <Statistic
-                  title="本月商机金额"
-                  value={overview?.monthOpportunityAmount || 0}
-                  precision={2}
-                  prefix="¥"
+                  title="本月商机"
+                  value={overview?.monthOpportunityCount || 0}
+                  suffix="条"
                   valueStyle={{ color: '#722ed1' }}
                 />
               </Col>
               <Col span={12}>
                 <Statistic
-                  title="本月成交订单"
+                  title="项目跟进"
                   value={overview?.monthWonOrders || 0}
                   prefix={<ShoppingCartOutlined />}
                   valueStyle={{ color: '#cf1322' }}

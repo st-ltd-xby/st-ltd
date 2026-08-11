@@ -1,39 +1,45 @@
 import { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Layout, Menu, Avatar, Badge, Dropdown, theme } from 'antd';
+import { useTranslation } from 'react-i18next';
 import {
   DashboardOutlined, GlobalOutlined, EditOutlined, FormOutlined,
   FunnelPlotOutlined, TeamOutlined, StarOutlined, FileTextOutlined,
   HeartOutlined, ShopOutlined, SettingOutlined, BellOutlined,
   LogoutOutlined, UserOutlined, MenuFoldOutlined, MenuUnfoldOutlined,
-  RocketOutlined,
+  RocketOutlined, ScanOutlined,
 } from '@ant-design/icons';
 import { useAuthStore } from '../stores/authStore';
 import { useVisitorTrack } from '../hooks/useVisitorTrack';
 
 const { Header, Sider, Content } = Layout;
 
-const menuItems = [
-  { key: '/dashboard', icon: <DashboardOutlined />, label: '数据看板', group: '概览' },
-  { key: '/cms/sites', icon: <GlobalOutlined />, label: '站点管理', group: '建站中心' },
-  { key: '/cms/builder', icon: <EditOutlined />, label: '页面搭建', group: '建站中心' },
-  { key: '/cms/forms', icon: <FormOutlined />, label: '表单管理', group: '建站中心' },
-  { key: '/scrm/leads', icon: <FunnelPlotOutlined />, label: '线索管理', group: '客户枢纽', badge: 12 },
-  { key: '/scrm/customers', icon: <TeamOutlined />, label: '客户管理', group: '客户枢纽' },
-  { key: '/scrm/opportunities', icon: <StarOutlined />, label: '商机管理', group: '客户枢纽' },
-  { key: '/content/articles', icon: <FileTextOutlined />, label: '内容营销', group: '营销中心' },
-  { key: '/marketing', icon: <HeartOutlined />, label: '全员营销', group: '营销中心' },
-  { key: '/mall', icon: <ShopOutlined />, label: '商城管理', group: '交易中心' },
-  { key: '/promotion', icon: <RocketOutlined />, label: '推广工具', group: '推广中心' },
-  { key: '/settings', icon: <SettingOutlined />, label: '系统设置', group: '系统' },
-];
-
 export default function MainLayout() {
+  const { t, i18n } = useTranslation();
   const [collapsed, setCollapsed] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const { user, tenant, logout } = useAuthStore();
   const { token: { colorBgContainer } } = theme.useToken();
+
+  // 强制使用当前语言，确保翻译生效
+  const currentLang = i18n.language || 'zh';
+
+  const menuItems = [
+    { key: '/dashboard', icon: <DashboardOutlined />, label: t('nav.dashboard'), groupKey: 'overview', groupLabel: t('nav.overview', 'Overview') },
+    { key: '/cms/sites', icon: <GlobalOutlined />, label: t('nav.sites', 'Sites'), groupKey: 'siteBuilder', groupLabel: t('nav.siteBuilder', 'Site Builder') },
+    { key: '/cms/builder', icon: <EditOutlined />, label: t('nav.pageBuilder', 'Page Builder'), groupKey: 'siteBuilder', groupLabel: t('nav.siteBuilder', 'Site Builder') },
+    { key: '/cms/forms', icon: <FormOutlined />, label: t('nav.forms', 'Forms'), groupKey: 'siteBuilder', groupLabel: t('nav.siteBuilder', 'Site Builder') },
+    { key: '/scrm/leads', icon: <FunnelPlotOutlined />, label: t('nav.leads'), groupKey: 'customerHub', groupLabel: t('nav.customerHub'), badge: 12 },
+    { key: '/scrm/customers', icon: <TeamOutlined />, label: t('nav.customers'), groupKey: 'customerHub', groupLabel: t('nav.customerHub') },
+    { key: '/scrm/opportunities', icon: <StarOutlined />, label: t('nav.opportunities'), groupKey: 'customerHub', groupLabel: t('nav.customerHub') },
+    { key: '/scan', icon: <ScanOutlined />, label: t('nav.scan'), groupKey: 'customerHub', groupLabel: t('nav.customerHub') },
+    { key: '/content/articles', icon: <FileTextOutlined />, label: t('nav.contentMarketing', 'Content Marketing'), groupKey: 'marketingCenter', groupLabel: t('nav.marketingCenter', 'Marketing Center') },
+    { key: '/marketing', icon: <HeartOutlined />, label: t('nav.employeeMarketing', 'Employee Marketing'), groupKey: 'marketingCenter', groupLabel: t('nav.marketingCenter', 'Marketing Center') },
+    { key: '/mall', icon: <ShopOutlined />, label: t('nav.mall'), groupKey: 'tradeCenter', groupLabel: t('nav.tradeCenter', 'Trade Center') },
+    { key: '/promotion', icon: <RocketOutlined />, label: t('nav.promotion'), groupKey: 'promotionCenter', groupLabel: t('nav.promotionCenter', 'Promotion Center') },
+    { key: '/settings', icon: <SettingOutlined />, label: t('nav.settings'), groupKey: 'system', groupLabel: t('nav.system', 'System') },
+  ];
 
   // 访客追踪
   useVisitorTrack(tenant?.id);
@@ -41,16 +47,16 @@ export default function MainLayout() {
   // 根据当前路径确定选中的菜单项
   const selectedKey = menuItems.find(item => location.pathname.startsWith(item.key))?.key || '/dashboard';
 
-  // 按 group 分组菜单
+  // 按 groupKey 分组（稳定 key，不随语言变化）
   const groupedItems: Record<string, typeof menuItems> = {};
   menuItems.forEach(item => {
-    if (!groupedItems[item.group]) groupedItems[item.group] = [];
-    groupedItems[item.group].push(item);
+    if (!groupedItems[item.groupKey]) groupedItems[item.groupKey] = [];
+    groupedItems[item.groupKey].push(item);
   });
 
-  const siderMenuItems = Object.entries(groupedItems).map(([group, items]) => ({
+  const siderMenuItems = Object.entries(groupedItems).map(([groupKey, items]) => ({
     type: 'group' as const,
-    label: group,
+    label: items[0].groupLabel,
     children: items.map(item => ({
       key: item.key,
       icon: item.icon,
@@ -88,7 +94,7 @@ export default function MainLayout() {
       >
         <div style={{ height: 64, display: 'flex', alignItems: 'center', padding: '0 20px', gap: 10 }}>
           <span style={{ color: '#1677ff', fontSize: 22 }}>&#9670;</span>
-          {!collapsed && <h1 style={{ color: '#fff', fontSize: 17, margin: 0 }}>ST-LTD 运营系统</h1>}
+          {!collapsed && <h1 style={{ color: '#fff', fontSize: 17, margin: 0 }}>ST-LTD</h1>}
         </div>
         <Menu
           theme="dark"
@@ -120,7 +126,7 @@ export default function MainLayout() {
           <Outlet />
         </Content>
         <div style={{ textAlign: 'center', padding: '16px 0', color: '#999', fontSize: 13, borderTop: '1px solid #f0f0f0' }}>
-          Copyright &copy; {new Date().getFullYear()} 辽宁高新安防科技有限公司 版权所有
+          Copyright &copy; {new Date().getFullYear()} ST-LTD. 保留所有权利。
         </div>
       </Layout>
     </Layout>

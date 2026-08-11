@@ -29,6 +29,7 @@
     "socket.io": "^4.8.1",
     "sqlite3": "^6.0.1",
     "swagger-ui-express": "^5.0.1",
+    "tencentcloud-sdk-nodejs-ocr": "^4.1.288",
     "zod": "^3.23.8"
   },
   "devDependencies": {

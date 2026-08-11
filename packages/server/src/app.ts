@@ -24,6 +24,7 @@ import agentRoutes from './modules/agent/agent.routes';
 import aiToolsRoutes from './modules/ai-tools/ai-tools.routes';
 import visitorRoutes from './modules/visitor/visitor.routes';
 import publicRoutes from './modules/public/public.routes';
+import ocrRoutes from './modules/ocr/ocr.routes';
 
 const app: Application = express();
 const PORT = process.env.PORT || 3000;
@@ -50,6 +51,10 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument, {
 app.use('/api/v1/auth', authRoutes);
 // 管理员认证路由（必须在dashboardRoutes之前）
 app.use('/api/v1/admin-auth', adminAuthRoutes);
+// OCR路由（公开接口，必须在dashboardRoutes之前）
+app.use('/api/v1/ocr', ocrRoutes);
+app.use('/api/v1/agent', agentRoutes);
+app.use('/api/v1/ai', aiToolsRoutes);
 app.use('/api/v1/cms', cmsRoutes);
 app.use('/api/v1/scrm', scrmRoutes);
 app.use('/api/v1/content', contentRoutes);
@@ -59,8 +64,6 @@ app.use('/api/v1', dashboardRoutes);
 app.use('/api/v1/promotion', promotionRoutes);
 app.use('/api/v1/admin', adminRouter);
 app.use('/api/v1', uploadRoutes);
-app.use('/api/v1/agent', agentRoutes);
-app.use('/api/v1/ai', aiToolsRoutes);
 app.use('/api/v1/public', publicRoutes);
 
 // 静态文件服务 - 上传目录

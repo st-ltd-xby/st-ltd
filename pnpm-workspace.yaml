@@ -7,3 +7,6 @@ allowBuilds:
   esbuild: true
   prisma: true
   sqlite3: true
+  tesseract.js: set this to true or false
+minimumReleaseAgeExclude:
+  - tencentcloud-sdk-nodejs-ocr@4.1.288

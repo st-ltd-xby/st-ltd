@@ -1,8 +1,10 @@
 import axios from 'axios';
-import { API_BASE_URL } from '../config/api';
+
+// 直接硬编码API地址，避免打包时变量映射错误
+const API_URL = 'https://st-ltd-api-production.up.railway.app/api/v1';
 
 const api = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: API_URL,
   timeout: 15000,
 });
 
@@ -217,6 +219,9 @@ export const promotionApi = {
   getStructuredData: (siteId?: string) => api.get('/promotion/seo/structured-data', { params: { siteId } }),
   autoFixSeo: (siteId: string) => api.post('/promotion/seo/auto-fix', { siteId }),
   exportSeoReport: () => api.get('/promotion/seo/report', { responseType: 'blob' }),
+  // SEO 策略
+  getSeoStrategies: (target?: string) => api.get('/promotion/seo/strategies', { params: { target } }),
+  strategyFixSeo: (data: { siteId?: string; pageId?: string }) => api.post('/promotion/seo/strategy-fix', data),
   // AI SEO
   aiSeoAnalyze: (data: any) => api.post('/ai/seo-analyze', data),
 };

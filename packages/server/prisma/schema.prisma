@@ -781,3 +781,19 @@ model AgentMessage {
 
   @@index([conversationId, createdAt])
 }
+
+// SEO 优化策略
+model SeoStrategy {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String   // 策略名称
+  description String?  // 策略描述
+  target      String   // 目标类型：site / page
+  rules       String   // JSON: 规则数组 [{field, condition, action, template}]
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([tenantId, isActive])
+}

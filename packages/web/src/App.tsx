@@ -23,6 +23,7 @@ import PageViewer from './pages/PageViewer';
 import ShortLinkRedirect from './pages/ShortLinkRedirect';
 import CustomerRegister from './pages/CustomerRegister';
 import OpportunityTracker from './pages/OpportunityTracker';
+import MobileScan from './pages/MobileScan';
 import { adminRoutes } from './routes/adminRoutes';
 // build v2
 
@@ -61,6 +62,8 @@ export default function App() {
           <Route path="/customer-register" element={<CustomerRegister />} />
           {/* 商机进度追踪（无需登录） */}
           <Route path="/track/:token" element={<OpportunityTracker />} />
+          {/* 名片扫描（无需登录） */}
+          <Route path="/scan" element={<MobileScan />} />
           {/* 后端管理路由 */}
           {adminRoutes.map((route, index) => (
             <Route key={index} path={route.path} element={route.element}>

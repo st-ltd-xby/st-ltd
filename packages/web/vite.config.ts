@@ -1,16 +1,21 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-export default defineConfig({
-  plugins: [react()],
-  build: {
-    // 强制重新计算依赖，确保代码变更触发hash更新
-    rollupOptions: {
-      input: {
-        main: 'src/main.tsx',
-      },
-    },
+// 每次构建注入时间戳，强制生成不同 hash，避免 Cloudflare Pages 缓存跳过上传
+const buildTimestamp = () => ({
+  name: 'build-timestamp',
+  transform(code: string, id: string) {
+    if (id.endsWith('index.html') || id.includes('main.tsx')) {
+      return code.replace('__BUILD_TS__', Date.now().toString())
+    }
   },
+  transformIndexHtml(html: string) {
+    return html.replace('__BUILD_TS__', Date.now().toString())
+  },
+})
+
+export default defineConfig({
+  plugins: [react(), buildTimestamp()],
   server: {
     port: 5173,
     proxy: {

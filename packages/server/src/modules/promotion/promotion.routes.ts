@@ -1126,3 +1126,199 @@ router.get('/seo/report', async (req: Request, res: Response) => {
 });
 
 export default router;
+
+// ===== SEO 策略管理 =====
+
+// 获取策略列表
+router.get('/seo/strategies', async (req: Request, res: Response) => {
+  try {
+    const { target } = req.query;
+    const where: any = { tenantId: req.user!.tenantId };
+    if (target) where.target = target;
+    const strategies = await prisma.seoStrategy.findMany({
+      where,
+      orderBy: { sortOrder: 'asc' },
+    });
+    success(res, strategies);
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 创建策略
+router.post('/seo/strategies', async (req: Request, res: Response) => {
+  try {
+    const { name, description, target, rules, isActive, sortOrder } = req.body;
+    if (!name || !target || !rules) return fail(res, '名称、目标和规则不能为空');
+    const strategy = await prisma.seoStrategy.create({
+      data: {
+        tenantId: req.user!.tenantId,
+        name,
+        description: description || '',
+        target,
+        rules: JSON.stringify(rules),
+        isActive: isActive !== false,
+        sortOrder: sortOrder || 0,
+      },
+    });
+    success(res, strategy, '策略创建成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 更新策略
+router.put('/seo/strategies/:id', async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const { name, description, target, rules, isActive, sortOrder } = req.body;
+    const existing = await prisma.seoStrategy.findFirst({
+      where: { id, tenantId: req.user!.tenantId },
+    });
+    if (!existing) return notFound(res, '策略不存在');
+    const data: any = {};
+    if (name !== undefined) data.name = name;
+    if (description !== undefined) data.description = description;
+    if (target !== undefined) data.target = target;
+    if (rules !== undefined) data.rules = JSON.stringify(rules);
+    if (isActive !== undefined) data.isActive = isActive;
+    if (sortOrder !== undefined) data.sortOrder = sortOrder;
+    const strategy = await prisma.seoStrategy.update({ where: { id }, data });
+    success(res, strategy, '策略更新成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 删除策略
+router.delete('/seo/strategies/:id', async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const existing = await prisma.seoStrategy.findFirst({
+      where: { id, tenantId: req.user!.tenantId },
+    });
+    if (!existing) return notFound(res, '策略不存在');
+    await prisma.seoStrategy.delete({ where: { id } });
+    success(res, null, '策略已删除');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 按策略执行 SEO 修复
+router.post('/seo/strategy-fix', async (req: Request, res: Response) => {
+  try {
+    const { siteId, pageId } = req.body;
+    const tenantId = req.user!.tenantId;
+
+    // 获取所有启用的策略
+    const strategies = await prisma.seoStrategy.findMany({
+      where: { tenantId, isActive: true },
+      orderBy: { sortOrder: 'asc' },
+    });
+
+    let fixed = 0;
+    const details: string[] = [];
+
+    // 处理站点策略
+    if (siteId) {
+      const site = await prisma.site.findFirst({
+        where: { id: siteId, tenantId },
+        include: { pages: true },
+      });
+      if (!site) return notFound(res, '站点不存在');
+
+      const siteStrategies = strategies.filter(s => s.target === 'site');
+      for (const strategy of siteStrategies) {
+        const rules = JSON.parse(strategy.rules);
+        for (const rule of rules) {
+          const { field, condition, action, template } = rule;
+          const currentValue = (site as any)[field];
+          let shouldFix = false;
+
+          if (condition === 'empty' && !currentValue) shouldFix = true;
+          else if (condition === 'short' && currentValue && currentValue.length < (rule.minLength || 10)) shouldFix = true;
+          else if (condition === 'missing' && !currentValue) shouldFix = true;
+
+          if (shouldFix) {
+            let value = template
+              ? template.replace(/\{siteName\}/g, site.name)
+                .replace(/\{siteDomain\}/g, site.domain || '')
+                .replace(/\{pageTitle\}/g, '')
+              : currentValue;
+            await prisma.site.update({ where: { id: siteId }, data: { [field]: value } });
+            fixed++;
+            details.push(`${strategy.name}: ${field}`);
+          }
+        }
+      }
+
+      // 处理关联页面的策略
+      const pageStrategies = strategies.filter(s => s.target === 'page');
+      for (const page of site.pages) {
+        for (const strategy of pageStrategies) {
+          const rules = JSON.parse(strategy.rules);
+          for (const rule of rules) {
+            const { field, condition, template } = rule;
+            const currentValue = (page as any)[field];
+            let shouldFix = false;
+
+            if (condition === 'empty' && !currentValue) shouldFix = true;
+            else if (condition === 'short' && currentValue && currentValue.length < (rule.minLength || 10)) shouldFix = true;
+
+            if (shouldFix) {
+              let value = template
+                ? template.replace(/\{siteName\}/g, site.name)
+                  .replace(/\{siteDomain\}/g, site.domain || '')
+                  .replace(/\{pageTitle\}/g, page.title)
+                : currentValue;
+              await prisma.page.update({ where: { id: page.id }, data: { [field]: value } });
+              fixed++;
+              details.push(`${strategy.name}: 页面${page.title}-${field}`);
+            }
+          }
+        }
+      }
+    }
+
+    // 处理单页面策略
+    if (pageId) {
+      const page = await prisma.page.findFirst({
+        where: { id: pageId, tenantId },
+        include: { site: true },
+      });
+      if (!page) return notFound(res, '页面不存在');
+
+      const pageStrategies = strategies.filter(s => s.target === 'page');
+      for (const strategy of pageStrategies) {
+        const rules = JSON.parse(strategy.rules);
+        for (const rule of rules) {
+          const { field, condition, template } = rule;
+          const currentValue = (page as any)[field];
+          let shouldFix = false;
+
+          if (condition === 'empty' && !currentValue) shouldFix = true;
+          else if (condition === 'short' && currentValue && currentValue.length < (rule.minLength || 10)) shouldFix = true;
+
+          if (shouldFix) {
+            let value = template
+              ? template.replace(/\{siteName\}/g, page.site?.name || '')
+                .replace(/\{siteDomain\}/g, page.site?.domain || '')
+                .replace(/\{pageTitle\}/g, page.title)
+              : currentValue;
+            await prisma.page.update({ where: { id: pageId }, data: { [field]: value } });
+            fixed++;
+            details.push(`${strategy.name}: ${field}`);
+          }
+        }
+      }
+    }
+
+    const msg = fixed > 0
+      ? `已修复 ${fixed} 项：${details.join('、')}`
+      : '所有策略检查通过，无需修复';
+    success(res, { fixed, details }, msg);
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});

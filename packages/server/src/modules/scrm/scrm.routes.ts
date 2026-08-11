@@ -210,12 +210,13 @@ router.post('/opportunities', async (req: Request, res: Response) => {
 
 router.put('/opportunities/:id', async (req: Request, res: Response) => {
   try {
-    const { title, amount, stage, probability, note, lostReason } = req.body;
+    const { title, amount, stage, probability, note, lostReason, expectedCloseDate } = req.body;
     const data: any = { title, amount, stage, probability, note };
+    if (expectedCloseDate) data.expectedCloseDate = new Date(expectedCloseDate as string);
     if (stage === 'won') data.wonAt = new Date();
-    if (stage === 'lost') { data.lostAt = new Date(); data.lostReason = lostReason; }
+    if (stage === 'lost') { data.lostAt = new Date(); data.lostReason = lostReason as string; }
 
-    const opportunity = await prisma.opportunity.update({ where: { id: req.params.id }, data });
+    const opportunity = await prisma.opportunity.update({ where: { id: req.params.id }, data: data as any });
     success(res, opportunity, '商机更新成功');
   } catch (error: any) {
     fail(res, error.message);

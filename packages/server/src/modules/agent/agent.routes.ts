@@ -10,6 +10,11 @@ router.use(authMiddleware);
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || '';
 const DEEPSEEK_BASE_URL = 'https://api.deepseek.com';
 
+// Coze API 配置
+const COZE_TOKEN = process.env.COZE_TOKEN || 'pat_GW8sEJIj5DBFm5aG8rdAR8R8L2cUg3QJIxZOw1hdOW2DUIORs1Z60iFeeYc4vy71';
+const COZE_BOT_ID = process.env.COZE_BOT_ID || '7672271561340092710';
+const COZE_BASE_URL = 'https://api.coze.cn';
+
 // System prompt for the AI advisor
 const SYSTEM_PROMPT = `你是 ST-LTD 营销枢纽系统的 AI 智囊顾问。你的职责是：
 
@@ -135,8 +140,8 @@ router.post('/chat', authorizeRole(['admin']), async (req: Request, res: Respons
     const { message, conversationId } = req.body;
     if (!message) return fail(res, '请输入消息内容');
 
-    if (!DEEPSEEK_API_KEY) {
-      return fail(res, 'AI 服务未配置，请联系管理员设置 DEEPSEEK_API_KEY');
+    if (!COZE_TOKEN) {
+      return fail(res, 'AI 服务未配置，请联系管理员设置 COZE_TOKEN');
     }
 
     const tenantId = req.user!.tenantId;
@@ -179,27 +184,34 @@ router.post('/chat', authorizeRole(['admin']), async (req: Request, res: Respons
       ...historyMessages.map(m => ({ role: m.role, content: m.content })),
     ];
 
-    // 调用 DeepSeek API
+    // 调用 Coze API
     const aiResponse = await axios.post(
-      `${DEEPSEEK_BASE_URL}/chat/completions`,
+      `${COZE_BASE_URL}/v3/chat`,
       {
-        model: 'deepseek-chat',
-        messages,
-        max_tokens: 4000,
-        temperature: 0.7,
+        bot_id: COZE_BOT_ID,
+        user_id: userId,
         stream: false,
+        auto_save_history: true,
+        additional_messages: messages.map(m => ({
+          role: m.role,
+          content: m.content,
+          content_type: 'text',
+        })),
       },
       {
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+          'Authorization': `Bearer ${COZE_TOKEN}`,
         },
         timeout: 60000,
       }
     );
 
-    const reply = aiResponse.data?.choices?.[0]?.message?.content || '抱歉，我暂时无法回答这个问题。';
-    const tokenCount = aiResponse.data?.usage?.total_tokens || 0;
+    // 解析 Coze 响应
+    const reply = aiResponse.data?.messages?.[0]?.content || 
+                  aiResponse.data?.data?.[0]?.content ||
+                  '抱歉，我暂时无法回答这个问题。';
+    const tokenCount = aiResponse.data?.usage?.token_count || 0;
 
     // 保存 AI 回复
     await prisma.agentMessage.create({

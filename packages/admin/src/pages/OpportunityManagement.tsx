@@ -26,11 +26,21 @@ const OpportunityManagement: React.FC = () => {
   const [currentOpp, setCurrentOpp] = useState<any>(null);
   const [form] = Form.useForm();
   const [oppType, setOppType] = useState('supply_demand');
+  const [customers, setCustomers] = useState<any[]>([]);
 
   const [stats, setStats] = useState({ total: 0, pending: 0, following: 0, won: 0, totalAmount: 0 });
 
   const getToken = () => localStorage.getItem('adminToken');
   const getHeaders = () => ({ Authorization: `Bearer ${getToken()}` });
+
+  const fetchCustomers = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/customers`, { headers: getHeaders(), params: { page: 1, pageSize: 200 } });
+      if (res.data.code === 0 || res.data.code === 200) {
+        setCustomers(res.data.data?.list || res.data.data || []);
+      }
+    } catch { /* ignore */ }
+  };
 
   const fetchOpportunities = async (page = 1) => {
     setLoading(true);
@@ -61,7 +71,7 @@ const OpportunityManagement: React.FC = () => {
     }
   };
 
-  useEffect(() => { fetchOpportunities(); fetchStats(); }, [searchTerm, typeFilter, stageFilter]);
+  useEffect(() => { fetchOpportunities(); fetchStats(); fetchCustomers(); }, [searchTerm, typeFilter, stageFilter]);
 
   const handleCreate = async () => {
     try {
@@ -432,8 +442,12 @@ const OpportunityManagement: React.FC = () => {
               </Form.Item>
             </Col>
             <Col span={8}>
-              <Form.Item name="customerId" label="关联客户" rules={[{ required: true }]}>
-                <Input placeholder="客户ID" />
+              <Form.Item name="customerId" label="关联客户">
+                <Select placeholder="选择关联客户（可选）" allowClear showSearch optionFilterProp="label">
+                  {customers.map((c: any) => (
+                    <Option key={c.id} value={c.id} label={c.name}>{c.name}</Option>
+                  ))}
+                </Select>
               </Form.Item>
             </Col>
           </Row>

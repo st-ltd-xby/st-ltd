@@ -44,6 +44,7 @@ router.get('/dashboard', async (req: Request, res: Response) => {
       prisma.opportunity.aggregate({
         where: { tenantId, createdAt: { gte: monthStart }, stage: { not: 'lost' } },
         _sum: { amount: true },
+        _count: true,
       }),
       // 本月成交订单
       prisma.order.count({ where: { tenantId, status: 'paid', paidAt: { gte: monthStart } } }),
@@ -87,6 +88,7 @@ router.get('/dashboard', async (req: Request, res: Response) => {
         todayPageViews,
         todayLeads,
         monthOpportunityAmount: monthOpportunities._sum.amount || 0,
+        monthOpportunityCount: monthOpportunities._count || 0,
         monthWonOrders,
         totalCustomers,
         totalLeads,

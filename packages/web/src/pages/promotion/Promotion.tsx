@@ -972,7 +972,15 @@ function SeoTools() {
   const handleAutoFix = async (siteId: string) => {
     setFixing(siteId);
     try {
-      const res: any = await promotionApi.autoFixSeo(siteId);
+      // 优先使用策略修复，无策略时回退到旧版自动修复
+      const strategiesRes: any = await promotionApi.getSeoStrategies('site');
+      const hasStrategies = strategiesRes.code === 0 && Array.isArray(strategiesRes.data) && strategiesRes.data.length > 0;
+      let res: any;
+      if (hasStrategies) {
+        res = await promotionApi.strategyFixSeo({ siteId });
+      } else {
+        res = await promotionApi.autoFixSeo(siteId);
+      }
       if (res.code === 0) {
         setFixResult(res.data);
         await loadAnalysis();
