@@ -7,7 +7,7 @@ import {
   FunnelPlotOutlined, TeamOutlined, StarOutlined, FileTextOutlined,
   HeartOutlined, ShopOutlined, SettingOutlined, BellOutlined,
   LogoutOutlined, UserOutlined, MenuFoldOutlined, MenuUnfoldOutlined,
-  RocketOutlined, ScanOutlined,
+  RocketOutlined, ScanOutlined, CameraOutlined,
 } from '@ant-design/icons';
 import { useAuthStore } from '../stores/authStore';
 import { useVisitorTrack } from '../hooks/useVisitorTrack';
@@ -30,10 +30,10 @@ export default function MainLayout() {
     { key: '/cms/sites', icon: <GlobalOutlined />, label: t('nav.sites', 'Sites'), groupKey: 'siteBuilder', groupLabel: t('nav.siteBuilder', 'Site Builder') },
     { key: '/cms/builder', icon: <EditOutlined />, label: t('nav.pageBuilder', 'Page Builder'), groupKey: 'siteBuilder', groupLabel: t('nav.siteBuilder', 'Site Builder') },
     { key: '/cms/forms', icon: <FormOutlined />, label: t('nav.forms', 'Forms'), groupKey: 'siteBuilder', groupLabel: t('nav.siteBuilder', 'Site Builder') },
+    { key: '/scan', icon: <ScanOutlined />, label: t('nav.scan'), groupKey: 'customerHub', groupLabel: t('nav.customerHub') },
     { key: '/scrm/leads', icon: <FunnelPlotOutlined />, label: t('nav.leads'), groupKey: 'customerHub', groupLabel: t('nav.customerHub'), badge: 12 },
     { key: '/scrm/customers', icon: <TeamOutlined />, label: t('nav.customers'), groupKey: 'customerHub', groupLabel: t('nav.customerHub') },
     { key: '/scrm/opportunities', icon: <StarOutlined />, label: t('nav.opportunities'), groupKey: 'customerHub', groupLabel: t('nav.customerHub') },
-    { key: '/scan', icon: <ScanOutlined />, label: t('nav.scan'), groupKey: 'customerHub', groupLabel: t('nav.customerHub') },
     { key: '/content/articles', icon: <FileTextOutlined />, label: t('nav.contentMarketing', 'Content Marketing'), groupKey: 'marketingCenter', groupLabel: t('nav.marketingCenter', 'Marketing Center') },
     { key: '/marketing', icon: <HeartOutlined />, label: t('nav.employeeMarketing', 'Employee Marketing'), groupKey: 'marketingCenter', groupLabel: t('nav.marketingCenter', 'Marketing Center') },
     { key: '/mall', icon: <ShopOutlined />, label: t('nav.mall'), groupKey: 'tradeCenter', groupLabel: t('nav.tradeCenter', 'Trade Center') },

@@ -40,6 +40,7 @@ export default function MobileVisits() {
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [step, setStep] = useState<'select-customer' | 'visit-form' | 'success'>('select-customer');
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     loadCustomers();
@@ -47,10 +48,17 @@ export default function MobileVisits() {
 
   const loadCustomers = async () => {
     try {
-      const res: any = await scrmApi.getCustomers({ page: 1, pageSize: 200 });
+      // 先尝试公开接口（移动端无需登录）
+      const res: any = await scrmApi.getPublicCustomers();
       if (res.code === 0) {
-        setCustomers(res.data?.list || res.data || []);
+        setCustomers(res.data || []);
+        return;
       }
+    } catch { /* ignore */ }
+    // 降级：尝试认证接口
+    try {
+      const res: any = await scrmApi.getCustomers({ page: 1, pageSize: 200 });
+      if (res.code === 0) setCustomers(res.data?.list || res.data || []);
     } catch { /* ignore */ }
   };
 
@@ -84,24 +92,76 @@ export default function MobileVisits() {
     );
   };
 
+  // 压缩图片（Canvas 方式）
+  const compressImage = (base64: string, maxWidth = 800, quality = 0.7): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.src = base64;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        
+        // 计算缩放后的尺寸
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(base64); // 如果获取不到 context，返回原图
+          return;
+        }
+        
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        // 转换为 JPEG 格式并压缩
+        const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
+        console.log(`📸 图片压缩: ${(base64.length / 1024).toFixed(1)}KB → ${(compressedBase64.length / 1024).toFixed(1)}KB`);
+        resolve(compressedBase64);
+      };
+      img.onerror = () => {
+        resolve(base64); // 加载失败，返回原图
+      };
+    });
+  };
+
   // 直接打开相机拍照（移动端优化）
-  const openCamera = () => {
+  const openCamera = async () => {
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.accept = 'image/*';
     fileInput.capture = 'environment'; // 后置摄像头
     
-    fileInput.onchange = (e: any) => {
+    fileInput.onchange = async (e: any) => {
       const file = e.target.files[0];
       if (file) {
+        console.log('📷 选择文件:', { name: file.name, size: `${(file.size / 1024).toFixed(1)}KB`, type: file.type });
+        
         const reader = new FileReader();
         reader.readAsDataURL(file);
-        reader.onload = () => {
-          setPhotoList(prev => [...prev, {
-            uid: Date.now().toString(),
-            name: file.name,
-            url: reader.result as string,
-          }]);
+        reader.onload = async () => {
+          // 压缩图片
+          const originalBase64 = reader.result as string;
+          console.log(' 原始图片大小:', `${(originalBase64.length / 1024).toFixed(1)}KB`);
+          
+          const compressedBase64 = await compressImage(originalBase64);
+          console.log('✅ 压缩后图片大小:', `${(compressedBase64.length / 1024).toFixed(1)}KB`);
+          console.log('✅ 压缩后前50字符:', compressedBase64.substring(0, 50));
+          
+          setPhotoList(prev => {
+            const newList = [...prev, {
+              uid: Date.now().toString(),
+              name: file.name,
+              url: compressedBase64,
+            }];
+            console.log(' 当前照片列表:', newList.map(p => ({ uid: p.uid, urlLength: p.url?.length || 0 })));
+            return newList;
+          });
         };
       }
     };
@@ -130,7 +190,7 @@ export default function MobileVisits() {
     setCoords(null);
   };
 
-  // 提交拜访记录
+  // 提交拜访记录（本地存储方案）
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
@@ -141,8 +201,11 @@ export default function MobileVisits() {
         return;
       }
 
+      setSubmitting(true);
+
       // 构建拜访记录
-      const visitData = {
+      const visitRecord = {
+        id: `visit_${Date.now()}`,
         customerId: values.customerId,
         customerName: selectedCustomer?.name || '',
         visitTime: new Date().toISOString(),
@@ -154,16 +217,43 @@ export default function MobileVisits() {
         content: values.content,
       };
 
-      // 调用后端 API 保存拜访记录
-      const res: any = await scrmApi.createVisit(visitData);
-      if (res.code === 0) {
-        message.success('拜访记录已保存');
-        setStep('success');
-      } else {
-        message.error(res.message || '保存失败');
+      console.log('📸 准备保存拜访记录:', {
+        customerId: visitRecord.customerId,
+        customerName: visitRecord.customerName,
+        photoCount: visitRecord.photos.length,
+        photos: visitRecord.photos.map((p, i) => ({ index: i, length: p.length, preview: p.substring(0, 30) })),
+        totalSize: `${(visitRecord.photos.reduce((sum, p) => sum + p.length, 0) / 1024 / 1024).toFixed(2)}MB`,
+      });
+
+      // 保存到 localStorage
+      const existingVisits = JSON.parse(localStorage.getItem('visitRecords') || '[]');
+      existingVisits.push(visitRecord);
+      localStorage.setItem('visitRecords', JSON.stringify(existingVisits));
+      console.log('💾 已保存到 localStorage.visitRecords');
+      
+      // 同时保存到客户维度的记录中（方便查询）
+      const customerVisitsKey = `visits_customer_${visitRecord.customerId}`;
+      const customerVisits = JSON.parse(localStorage.getItem(customerVisitsKey) || '[]');
+      customerVisits.push(visitRecord);
+      localStorage.setItem(customerVisitsKey, JSON.stringify(customerVisits));
+      console.log(`💾 已保存到 localStorage.${customerVisitsKey}`);
+      
+      // 验证存储
+      const savedVisits = JSON.parse(localStorage.getItem(customerVisitsKey) || '[]');
+      console.log('🔍 验证存储 - 读取到的记录数:', savedVisits.length);
+      if (savedVisits.length > 0) {
+        const lastVisit = savedVisits[savedVisits.length - 1];
+        console.log(' 最后一条记录的photos:', lastVisit.photos?.map((p: string, i: number) => ({ index: i, length: p.length, hasData: p.length > 100 })));
       }
-    } catch (error) {
-      console.error(error);
+
+      console.log('✅ 拜访记录已保存到本地存储');
+      message.success('拜访记录已保存');
+      setStep('success');
+    } catch (error: any) {
+      console.error('❌ 提交失败:', error);
+      message.error(error.message || '提交失败');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -426,6 +516,8 @@ export default function MobileVisits() {
             size="large"
             type="primary"
             onClick={handleSubmit}
+            loading={submitting}
+            disabled={submitting}
             style={{ 
               borderRadius: 12,
               height: 56,

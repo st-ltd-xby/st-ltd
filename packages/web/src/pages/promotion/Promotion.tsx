@@ -1154,7 +1154,7 @@ function SeoTools() {
                 <div>
                   <Title level={5} style={{ margin: 0 }}>{site.siteName}</Title>
                   <Space style={{ marginTop: 4 }}>
-                    {site.domain ? <Tag color="green">{site.domain}</Tag> : <Tag color="red">未绑定域名</Tag>}
+                    {site.domain && site.domain.trim() ? <Tag color="green">{site.domain}</Tag> : <Tag color="red">未绑定域名</Tag>}
                     <Text type="secondary">{site.pageCount} 个页面 / {site.publishedPageCount} 个已发布</Text>
                   </Space>
                 </div>

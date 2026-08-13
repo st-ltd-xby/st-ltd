@@ -82,6 +82,7 @@ export const scrmApi = {
   assignLead: (id: string, assigneeId: string) => api.post(`/scrm/leads/${id}/assign`, { assigneeId }),
   addFollowUp: (leadId: string, data: any) => api.post(`/scrm/leads/${leadId}/follow-ups`, data),
   getCustomers: (params?: any) => api.get('/scrm/customers', { params }),
+  getPublicCustomers: () => api.get('/scrm/customers/public'),
   createCustomer: (data: any) => api.post('/scrm/customers', data),
   getCustomer: (id: string) => api.get(`/scrm/customers/${id}`),
   updateCustomer: (id: string, data: any) => api.put(`/scrm/customers/${id}`, data),

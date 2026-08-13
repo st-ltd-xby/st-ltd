@@ -14,6 +14,8 @@ import Forms from './pages/cms/Forms';
 import Leads from './pages/scrm/Leads';
 import Customers from './pages/scrm/Customers';
 import Opportunities from './pages/scrm/Opportunities';
+import CustomerVisits from './pages/scrm/CustomerVisits';
+import MobileVisits from './pages/scrm/MobileVisits';
 import Articles from './pages/content/Articles';
 import Marketing from './pages/marketing/Marketing';
 import Mall from './pages/mall/Mall';
@@ -48,6 +50,7 @@ export default function App() {
             <Route path="scrm/leads" element={<Leads />} />
             <Route path="scrm/customers" element={<Customers />} />
             <Route path="scrm/opportunities" element={<Opportunities />} />
+            <Route path="scrm/visits" element={<CustomerVisits />} />
             <Route path="content/articles" element={<Articles />} />
             <Route path="marketing" element={<Marketing />} />
             <Route path="mall" element={<Mall />} />
@@ -64,6 +67,8 @@ export default function App() {
           <Route path="/track/:token" element={<OpportunityTracker />} />
           {/* 名片扫描（无需登录） */}
           <Route path="/scan" element={<MobileScan />} />
+          {/* 移动拜访（无需登录，独立页面） */}
+          <Route path="/mobile-visits" element={<MobileVisits />} />
           {/* 后端管理路由 */}
           {adminRoutes.map((route, index) => (
             <Route key={index} path={route.path} element={route.element}>

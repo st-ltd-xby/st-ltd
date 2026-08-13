@@ -1,12 +1,14 @@
 ﻿import React, { useState, useEffect } from 'react';
 import {
   Card, Table, Button, Space, Input, Modal, Form, message, Select, Tag,
-  Drawer, Descriptions, Tabs, Popconfirm, Badge, Tooltip, Row, Col, Statistic, Timeline, Divider
+  Drawer, Descriptions, Tabs, Popconfirm, Badge, Tooltip, Row, Col, Statistic, Timeline, Divider,
+  InputNumber, DatePicker, Image, Empty
 } from 'antd';
 import {
   SearchOutlined, PlusOutlined, EditOutlined, DeleteOutlined, EyeOutlined,
   TeamOutlined, UserOutlined, PhoneOutlined, MailOutlined, EnvironmentOutlined,
-  StarOutlined, SwapOutlined, FundOutlined, ContactsOutlined, MessageOutlined, ClockCircleOutlined
+  StarOutlined, SwapOutlined, FundOutlined, ContactsOutlined, MessageOutlined, ClockCircleOutlined,
+  CameraOutlined, PictureOutlined, RocketOutlined, PlayCircleOutlined, CheckCircleOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
@@ -40,6 +42,28 @@ const CustomerHub: React.FC = () => {
 
   // 统计数据
   const [stats, setStats] = useState({ total: 0, active: 0, prospect: 0, churned: 0 });
+
+  // 员工列表（用于分配对接人）
+  const [employees, setEmployees] = useState<any[]>([]);
+
+  // 创建商机
+  const [oppModalOpen, setOppModalOpen] = useState(false);
+  const [oppForm] = Form.useForm();
+  const [oppTargetCustomer, setOppTargetCustomer] = useState<any>(null);
+
+  // 拜访记录
+  const [visitRecords, setVisitRecords] = useState<any[]>([]);
+  const [visitLoading, setVisitLoading] = useState(false);
+
+  // 任务管理抽屉
+  const [taskDrawerOpen, setTaskDrawerOpen] = useState(false);
+  const [taskCustomer, setTaskCustomer] = useState<any>(null);
+
+  // 客户两项任务
+  const customerTaskList = [
+    { key: 'phone_contact', label: '电话联络', icon: <PhoneOutlined />, color: 'blue', desc: '初步接触客户，确认需求意向' },
+    { key: 'customer_visit', label: '客户拜访', icon: <CameraOutlined />, color: 'green', desc: '实地拜访，拍照打卡，收集详细需求' },
+  ];
 
   const getToken = () => localStorage.getItem('adminToken');
   const getHeaders = () => ({ Authorization: `Bearer ${getToken()}` });
@@ -75,7 +99,19 @@ const CustomerHub: React.FC = () => {
     }
   };
 
-  useEffect(() => { fetchCustomers(); fetchStats(); }, [searchTerm, levelFilter, stageFilter]);
+  useEffect(() => { fetchCustomers(); fetchStats(); fetchEmployees(); }, [searchTerm, levelFilter, stageFilter]);
+
+  // 获取员工列表（用于分配对接人）
+  const fetchEmployees = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/employees`, { headers: getHeaders(), params: { page: 1, pageSize: 200 } });
+      if (res.data.code === 0 || res.data.code === 200) {
+        setEmployees(res.data.data?.list || res.data.data || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch employees:', error);
+    }
+  };
 
   // 创建客户
   const handleCreate = async () => {
@@ -133,6 +169,8 @@ const CustomerHub: React.FC = () => {
         setDrawerVisible(true);
         // 加载跟进记录
         loadFollowUps(record.id);
+        // 加载拜访记录
+        loadVisitRecords(record.id);
       }
     } catch (error) {
       message.error('获取详情失败');
@@ -149,6 +187,102 @@ const CustomerHub: React.FC = () => {
       }
     } catch { setFollowUps([]); }
     finally { setFollowUpLoading(false); }
+  };
+
+  // 加载拜访记录
+  const loadVisitRecords = async (customerId: string) => {
+    setVisitLoading(true);
+    try {
+      const res = await axios.get(`${API_BASE}/customers/${customerId}/visits`, { headers: getHeaders() });
+      if (res.data.code === 0 || res.data.code === 200) {
+        setVisitRecords(Array.isArray(res.data.data) ? res.data.data : []);
+      }
+    } catch { setVisitRecords([]); }
+    finally { setVisitLoading(false); }
+  };
+
+  // 打开任务管理抽屉
+  const openTaskDrawer = (customer: any) => {
+    setTaskCustomer(customer);
+    setTaskDrawerOpen(true);
+  };
+
+  // 启动任务
+  const handleStartTask = async (taskKey: string) => {
+    if (!taskCustomer) return;
+    const task = customerTaskList.find(t => t.key === taskKey);
+    if (!task) return;
+
+    Modal.confirm({
+      title: `启动「${task.label}」任务`,
+      content: (
+        <div>
+          <p>确定为客户「<strong>{taskCustomer.name}</strong>」启动{task.label}任务吗？</p>
+          <p style={{ color: '#888', fontSize: 13, marginTop: 8 }}>
+            任务启动后，前端移动端将显示该任务，销售人员完成操作后状态自动更新为“已完成”
+          </p>
+        </div>
+      ),
+      okText: '确认启动',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          message.success(`「${task.label}」任务已启动，请通知销售人员在移动端查看并执行`);
+          fetchCustomers(pagination.current);
+          showDetail(taskCustomer);
+        } catch (error: any) {
+          console.error('启动任务失败:', error);
+          message.error(error.response?.data?.message || '启动失败');
+        }
+      },
+    });
+  };
+
+  // 判断任务是否已完成
+  const isTaskCompleted = (customer: any, taskKey: string) => {
+    if (!customer) return false;
+    if (taskKey === 'phone_contact') {
+      return (customer.followUps || []).some((f: any) => f.type === 'phone');
+    }
+    if (taskKey === 'customer_visit') {
+      return (customer.visitRecords || []).length > 0;
+    }
+    return false;
+  };
+
+  // 转化为商机（一键转化）
+  const handleConvertToOpportunity = (customer: any) => {
+    Modal.confirm({
+      title: '转化为客户商机',
+      content: (
+        <div>
+          <p>确定将客户 <strong>「{customer.name}」</strong> 转化为商机吗？</p>
+          <p style={{ color: '#888', fontSize: 13 }}>将自动创建一个关联该客户的商机，起始阶段为「电话联络」</p>
+        </div>
+      ),
+      okText: '确认转化',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          const res = await axios.post(`${API_BASE}/opportunities`, {
+            title: `${customer.name} - 商机`,
+            customerId: customer.id,
+            type: 'supply_demand',
+            stage: 'phone_contact',
+            probability: 50,
+          }, { headers: getHeaders() });
+          if (res.data.code === 0 || res.data.code === 200) {
+            message.success(`已将「${customer.name}」转化为商机`);
+            fetchCustomers(pagination.current);
+            fetchStats();
+          } else {
+            message.error(res.data.message || '转化失败');
+          }
+        } catch {
+          message.error('转化失败');
+        }
+      },
+    });
   };
 
   // 创建跟进记录
@@ -262,6 +396,13 @@ const CustomerHub: React.FC = () => {
       render: (v: number) => v ? `¥${v.toLocaleString()}` : '-',
     },
     {
+      title: '对接人',
+      dataIndex: 'assigneeName',
+      key: 'assigneeName',
+      width: 100,
+      render: (v: string) => v ? <Tag color="blue"><UserOutlined /> {v}</Tag> : <Tag>-</Tag>,
+    },
+    {
       title: '标签',
       dataIndex: 'tags',
       key: 'tags',
@@ -276,11 +417,17 @@ const CustomerHub: React.FC = () => {
     {
       title: '操作',
       key: 'actions',
-      width: 150,
+      width: 180,
       render: (_: any, record: any) => (
         <Space>
           <Tooltip title="查看详情">
             <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => showDetail(record)} />
+          </Tooltip>
+          <Tooltip title="转化为商机">
+            <Button type="link" size="small" icon={<SwapOutlined />} style={{ color: '#faad14' }} onClick={() => handleConvertToOpportunity(record)} />
+          </Tooltip>
+          <Tooltip title="任务管理">
+            <Button type="link" size="small" icon={<RocketOutlined />} style={{ color: '#722ed1' }} onClick={() => openTaskDrawer(record)} />
           </Tooltip>
           <Tooltip title="编辑">
             <Button type="link" size="small" icon={<EditOutlined />} onClick={() => {
@@ -525,6 +672,24 @@ const CustomerHub: React.FC = () => {
           <Form.Item name="address" label="地址">
             <Input />
           </Form.Item>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="assigneeName" label="分配对接人">
+                <Select 
+                  placeholder="选择销售人员" 
+                  allowClear 
+                  showSearch 
+                  optionFilterProp="label"
+                >
+                  {employees.map((emp: any) => (
+                    <Option key={emp.id} value={emp.name} label={`${emp.name} (${emp.department || '无部门'})`}>
+                      {emp.name} - {emp.department || '无部门'}
+                    </Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
           <Form.Item name="tags" label="标签">
             <Select mode="tags" placeholder="输入标签" />
           </Form.Item>
@@ -551,6 +716,11 @@ const CustomerHub: React.FC = () => {
                 </Descriptions.Item>
                 <Descriptions.Item label="阶段">
                   <Tag color={stageColors[drawerCustomer.stage]}>{stageLabels[drawerCustomer.stage]}</Tag>
+                </Descriptions.Item>
+                <Descriptions.Item label="对接人">
+                  {drawerCustomer.assigneeName ? (
+                    <Tag color="blue"><UserOutlined /> {drawerCustomer.assigneeName}</Tag>
+                  ) : '-'}
                 </Descriptions.Item>
                 <Descriptions.Item label="行业">{drawerCustomer.industry || '-'}</Descriptions.Item>
                 <Descriptions.Item label="网站">{drawerCustomer.website || '-'}</Descriptions.Item>
@@ -587,23 +757,39 @@ const CustomerHub: React.FC = () => {
               ) : <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>暂无联系人</div>}
             </TabPane>
             <TabPane tab="关联商机" key="opportunities">
+              <div style={{ marginBottom: 16 }}>
+                <Button type="primary" size="small" icon={<SwapOutlined />} onClick={() => handleConvertToOpportunity(drawerCustomer)}>
+                  转化为商机
+                </Button>
+              </div>
               {drawerCustomer.opportunities?.length > 0 ? (
                 <Table
                   dataSource={drawerCustomer.opportunities}
                   rowKey="id"
                   size="small"
-                  pagination={false}
+                  pagination={{ pageSize: 5, simple: true }}
                   columns={[
-                    { title: '商机名称', dataIndex: 'title' },
+                    { title: '商机名称', dataIndex: 'title', render: (v: string) => <strong>{v}</strong> },
                     { title: '类型', dataIndex: 'type', render: (v: string) => {
                       const labels: Record<string, string> = { supply_demand: '供需', bidding: '招投标', trade: '买卖', resource: '资源' };
-                      return <Tag>{labels[v] || v}</Tag>;
+                      return <Tag color="blue">{labels[v] || v}</Tag>;
                     }},
-                    { title: '金额', dataIndex: 'amount', render: (v: number) => `¥${v?.toLocaleString()}` },
-                    { title: '阶段', dataIndex: 'stage' },
+                    { title: '金额', dataIndex: 'amount', render: (v: number) => v ? `¥${v.toLocaleString()}` : '-' },
+                    { title: '阶段', dataIndex: 'stage', render: (v: string) => {
+                      const sl: Record<string, string> = {
+                        phone_contact: '电话联络', customer_visit: '客户拜访',
+                        project_publish: '项目发布', project_docking: '项目对接', project_landing: '项目落地'
+                      };
+                      const sc: Record<string, string> = {
+                        phone_contact: 'blue', customer_visit: 'green',
+                        project_publish: 'orange', project_docking: 'purple', project_landing: 'red'
+                      };
+                      return <Tag color={sc[v] || 'default'}>{sl[v] || v}</Tag>;
+                    }},
+                    { title: '概率', dataIndex: 'probability', render: (v: number) => `${v || 0}%` },
                   ]}
                 />
-              ) : <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>暂无关联商机</div>}
+              ) : <Empty description="暂无关联商机，点击上方按钮创建" image={Empty.PRESENTED_IMAGE_SIMPLE} />}
             </TabPane>
             <TabPane tab="来源线索" key="lead">
               {drawerCustomer.lead ? (
@@ -624,6 +810,51 @@ const CustomerHub: React.FC = () => {
                   </Descriptions>
                 </div>
               ) : <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>该客户为手动创建，无关联线索</div>}
+            </TabPane>
+            <TabPane tab={<span><CameraOutlined /> 拜访记录</span>} key="visits">
+              {visitLoading ? (
+                <div style={{ textAlign: 'center', padding: 40 }}><ClockCircleOutlined spin /> 加载中...</div>
+              ) : visitRecords.length > 0 ? (
+                <Timeline>
+                  {visitRecords.map((record: any) => (
+                    <Timeline.Item key={record.id} color="green">
+                      <div style={{ marginBottom: 8 }}>
+                        <Tag color="green"><CameraOutlined /> 现场拜访</Tag>
+                        <span style={{ color: '#999', fontSize: 12 }}>{new Date(record.createdAt).toLocaleString()}</span>
+                      </div>
+                      <div style={{ marginBottom: 8 }}>{record.content || '无详细内容'}</div>
+                      {record.location && (
+                        <div style={{ fontSize: 13, color: '#666', marginBottom: 4 }}>
+                          <EnvironmentOutlined /> {record.location}
+                          {record.lat && record.lng && <span style={{ marginLeft: 8, color: '#aaa' }}>({record.lat}, {record.lng})</span>}
+                        </div>
+                      )}
+                      {record.photos && record.photos.length > 0 && (
+                        <div style={{ marginTop: 8 }}>
+                          <div style={{ fontSize: 13, color: '#888', marginBottom: 8 }}>
+                            <PictureOutlined /> 现场照片 ({record.photos.length}张)
+                          </div>
+                          <Image.PreviewGroup>
+                            <Space wrap>
+                              {record.photos.map((photo: any, idx: number) => (
+                                <Image
+                                  key={idx}
+                                  src={photo.url || photo}
+                                  width={100}
+                                  height={100}
+                                  style={{ objectFit: 'cover', borderRadius: 4 }}
+                                />
+                              ))}
+                            </Space>
+                          </Image.PreviewGroup>
+                        </div>
+                      )}
+                    </Timeline.Item>
+                  ))}
+                </Timeline>
+              ) : <Empty description="暂无拜访记录" image={Empty.PRESENTED_IMAGE_SIMPLE}>
+                <div style={{ color: '#999' }}>前端移动端完成的拜访记录将在此展示</div>
+              </Empty>}
             </TabPane>
             <TabPane tab="跟进记录" key="followUps">
               <div style={{ marginBottom: 16 }}>
@@ -651,6 +882,164 @@ const CustomerHub: React.FC = () => {
           </Tabs>
         )}
       </Drawer>
+
+      {/* 任务管理抽屉 */}
+      <Drawer
+        title={taskCustomer ? `任务管理 - ${taskCustomer.name}` : '任务管理'}
+        open={taskDrawerOpen}
+        onClose={() => { setTaskDrawerOpen(false); setTaskCustomer(null); }}
+        width={560}
+      >
+        {taskCustomer && (
+          <div>
+            <Descriptions column={2} bordered size="small" style={{ marginBottom: 24 }}>
+              <Descriptions.Item label="客户名称" span={2}><strong>{taskCustomer.name}</strong></Descriptions.Item>
+              <Descriptions.Item label="等级"><Tag color={levelColors[taskCustomer.level]}>{taskCustomer.level}级</Tag></Descriptions.Item>
+              <Descriptions.Item label="对接人">{taskCustomer.assigneeName || '-'}</Descriptions.Item>
+            </Descriptions>
+
+            <h4 style={{ marginBottom: 16 }}>客户任务列表</h4>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {customerTaskList.map((task, idx) => {
+                const completed = isTaskCompleted(taskCustomer, task.key);
+                const prevCompleted = idx === 0 || isTaskCompleted(taskCustomer, customerTaskList[idx - 1].key);
+
+                return (
+                  <Card
+                    key={task.key}
+                    size="small"
+                    style={{
+                      borderRadius: 12,
+                      border: completed ? '2px solid #52c41a' : '1px solid #e8e8e8',
+                      background: completed ? '#f6ffed' : '#fff',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{
+                          width: 40, height: 40, borderRadius: '50%',
+                          background: completed ? '#52c41a' : task.color === 'blue' ? '#e6f7ff' : '#f6ffed',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 20,
+                        }}>
+                          {completed ? <CheckCircleOutlined style={{ color: '#fff' }} /> : task.icon}
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 16 }}>{task.label}</div>
+                          <div style={{ fontSize: 13, color: '#999' }}>{task.desc}</div>
+                        </div>
+                      </div>
+                      <div>
+                        {completed ? (
+                          <Tag color="success" icon={<CheckCircleOutlined />}>已完成</Tag>
+                        ) : (
+                          <Button
+                            type="primary"
+                            size="small"
+                            icon={<PlayCircleOutlined />}
+                            disabled={!prevCompleted}
+                            onClick={() => handleStartTask(task.key)}
+                            style={{ background: '#722ed1', borderColor: '#722ed1' }}
+                          >
+                            启动任务
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+
+            <Divider />
+            <div style={{ textAlign: 'center', color: '#999', fontSize: 13 }}>
+              任务启动后，前端移动端将显示对应任务，销售人员完成操作后状态自动更新
+            </div>
+          </div>
+        )}
+      </Drawer>
+
+      {/* 创建商机弹窗（保留，从详情页使用） */}
+      <Modal
+        title={`为「${drawerCustomer?.name || ''}」创建商机`}
+        open={oppModalOpen}
+        onCancel={() => { setOppModalOpen(false); oppForm.resetFields(); }}
+        onOk={async () => {
+          if (!drawerCustomer) return;
+          try {
+            const values = await oppForm.validateFields();
+            if (values.expectedCloseDate && values.expectedCloseDate.toISOString) {
+              values.expectedCloseDate = values.expectedCloseDate.toISOString();
+            }
+            values.customerId = drawerCustomer.id;
+            const res = await axios.post(`${API_BASE}/opportunities`, values, { headers: getHeaders() });
+            if (res.data.code === 0 || res.data.code === 200) {
+              message.success('商机创建成功');
+              setOppModalOpen(false);
+              oppForm.resetFields();
+              showDetail(drawerCustomer);
+            } else {
+              message.error(res.data.message || '创建失败');
+            }
+          } catch (error: any) {
+            if (error.errorFields) message.warning('请填写必填项');
+            else message.error('创建失败');
+          }
+        }}
+        width={560}
+        okText="创建"
+        cancelText="取消"
+      >
+        <Form form={oppForm} layout="vertical">
+          <Form.Item name="title" label="商机名称" rules={[{ required: true, message: '请输入商机名称' }]}>
+            <Input placeholder="输入商机名称" />
+          </Form.Item>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item name="type" label="商机类型" initialValue="supply_demand">
+                <Select>
+                  <Option value="supply_demand">供需信息</Option>
+                  <Option value="bidding">招投标</Option>
+                  <Option value="trade">买卖关系</Option>
+                  <Option value="resource">资源对接</Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="stage" label="起始阶段" initialValue="phone_contact">
+                <Select>
+                  <Option value="phone_contact">电话联络</Option>
+                  <Option value="customer_visit">客户拜访</Option>
+                  <Option value="project_publish">项目发布</Option>
+                  <Option value="project_docking">项目对接</Option>
+                  <Option value="project_landing">项目落地</Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="probability" label="赢单概率(%)">
+                <InputNumber style={{ width: '100%' }} min={0} max={100} />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="amount" label="预估金额">
+                <InputNumber style={{ width: '100%' }} placeholder="金额" min={0} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="expectedCloseDate" label="预计成交日期">
+                <DatePicker style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Form.Item name="description" label="详细描述">
+            <Input.TextArea rows={3} placeholder="描述商机详情..." />
+          </Form.Item>
+        </Form>
+      </Modal>
 
       {/* 新建跟进记录弹窗 */}
       <Modal

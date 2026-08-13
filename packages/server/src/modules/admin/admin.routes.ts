@@ -537,13 +537,22 @@ router.get('/customers', authorizeRole(['admin']), async (req: Request, res: Res
         include: {
           contacts: true,
           opportunities: true,
-          lead: { select: { id: true, source: true, createdAt: true } }
+          lead: { select: { id: true, source: true, createdAt: true } },
+          followUps: { select: { id: true, type: true, createdAt: true } },
+          visitRecords: { select: { id: true, visitTime: true, photos: true, content: true } },
+          assignee: { select: { id: true, name: true, email: true } },
         }
       }),
       prisma.customer.count({ where: whereConditions })
     ]);
 
-    success(res, { list: customers, total, page: Number(page), pageSize: Number(pageSize) }, '客户列表获取成功');
+    // 映射 assignee.name 为 assigneeName
+    const customersWithAssignee = customers.map(c => ({
+      ...c,
+      assigneeName: c.assignee?.name || null,
+    }));
+
+    success(res, { list: customersWithAssignee, total, page: Number(page), pageSize: Number(pageSize) }, '客户列表获取成功');
   } catch (error: any) {
     fail(res, error.message);
   }
@@ -574,7 +583,9 @@ router.get('/customers/:id', authorizeRole(['admin']), async (req: Request, res:
       include: {
         contacts: true,
         opportunities: true,
-        lead: { include: { followUps: { orderBy: { createdAt: 'desc' } } } }
+        lead: { include: { followUps: { orderBy: { createdAt: 'desc' } } } },
+        followUps: { select: { id: true, type: true, createdAt: true }, orderBy: { createdAt: 'desc' } },
+        visitRecords: { select: { id: true, visitTime: true, photos: true, content: true, location: true, address: true }, orderBy: { visitTime: 'desc' } },
       }
     });
 
@@ -620,11 +631,24 @@ router.post('/customers', authorizeRole(['admin']), async (req: Request, res: Re
 router.put('/customers/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
   try {
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const { name, industry, level, stage, contactName, contactPhone, contactEmail, address, website, tags, note } = req.body;
+    const { name, industry, level, stage, contactName, contactPhone, contactEmail, address, website, tags, note, assigneeId } = req.body;
     
     const customer = await prisma.customer.update({
       where: { id, tenantId: req.user!.tenantId },
-      data: { name, industry, level, stage, contactName, contactPhone, contactEmail, address, website, tags, note }
+      data: { 
+        name, 
+        industry, 
+        level, 
+        stage, 
+        contactName, 
+        contactPhone, 
+        contactEmail, 
+        address, 
+        website, 
+        tags, 
+        note,
+        assigneeId: assigneeId || null // 支持分配/取消对接人
+      }
     });
 
     success(res, customer, '客户更新成功');

@@ -804,12 +804,21 @@ router.get('/seo/sitemap.xml', async (req, res) => {
         (0, response_1.fail)(res, error.message);
     }
 });
-// SEO 分析（增强版）
+// SEO 分析（智能版 - 结合SEO策略）
 router.get('/seo/analysis', async (req, res) => {
     try {
         const sites = await prisma_1.default.site.findMany({
             where: { tenantId: req.user.tenantId },
             include: { pages: true },
+        });
+        // 获取用户配置的 SEO 策略
+        const strategies = await prisma_1.default.seoStrategy.findMany({
+            where: {
+                tenantId: req.user.tenantId,
+                target: 'site',
+                isActive: true
+            },
+            orderBy: { sortOrder: 'asc' }
         });
         const analysis = sites.map(site => {
             const checks = [];
@@ -820,21 +829,73 @@ router.get('/seo/analysis', async (req, res) => {
                 if (!passed)
                     score -= impact === 'high' ? 20 : impact === 'medium' ? 10 : 5;
             };
-            // 基础 SEO 检查（passed=true 表示通过/没问题）
-            addCheck('基础', !!site.seoTitle, '缺少 SEO 标题', '为站点设置 SEO 标题（30-60字符）', 'high', site.seoTitle || undefined);
-            addCheck('基础', !!site.seoDesc, '缺少 SEO 描述', '为站点设置 SEO 描述（120-160字符）', 'high', site.seoDesc || undefined);
-            addCheck('基础', !!site.seoKeywords, '缺少关键词', '设置 3-5 个核心关键词', 'medium', site.seoKeywords || undefined);
-            addCheck('基础', !!site.domain, '未绑定域名', '绑定自定义域名提升可信度', 'high', site.domain || undefined);
-            // 长度检查
-            if (site.seoTitle) {
-                addCheck('优化', site.seoTitle.length <= 60, `SEO 标题过长（${site.seoTitle.length}字符）`, '缩短至 60 字符以内', 'medium', site.seoTitle);
-                addCheck('优化', site.seoTitle.length >= 10, 'SEO 标题过短', '标题至少 10 个字符', 'low', site.seoTitle);
+            // ========== 1. 应用用户配置的 SEO 策略 ==========
+            if (strategies.length > 0) {
+                for (const strategy of strategies) {
+                    const rules = strategy.rules || [];
+                    for (const rule of rules) {
+                        const { field, condition, action, template, minLength } = rule;
+                        // 标题检查
+                        if (field === 'title') {
+                            if (condition === 'minLength' && site.seoTitle) {
+                                const minLen = minLength || 10;
+                                const passed = site.seoTitle.length >= minLen;
+                                addCheck('策略', passed, `SEO标题过短（${site.seoTitle.length}字符，要求≥${minLen}）`, action || `标题至少 ${minLen} 个字符`, 'medium', site.seoTitle);
+                            }
+                            if (condition === 'maxLength' && site.seoTitle) {
+                                const maxLen = parseInt(condition.split(':')[1] || '60');
+                                const passed = site.seoTitle.length <= maxLen;
+                                addCheck('策略', passed, `SEO标题过长（${site.seoTitle.length}字符，要求≤${maxLen}）`, action || `标题不超过 ${maxLen} 个字符`, 'medium', site.seoTitle);
+                            }
+                            if (condition === 'required' && !site.seoTitle) {
+                                addCheck('策略', false, '缺少SEO标题', action || '必须设置SEO标题', 'high');
+                            }
+                        }
+                        // 描述检查
+                        if (field === 'description') {
+                            if (condition === 'minLength' && site.seoDesc) {
+                                const minLen = minLength || 50;
+                                const passed = site.seoDesc.length >= minLen;
+                                addCheck('策略', passed, `SEO描述过短（${site.seoDesc.length}字符，要求≥${minLen}）`, action || `描述至少 ${minLen} 个字符`, 'medium', site.seoDesc);
+                            }
+                            if (condition === 'maxLength' && site.seoDesc) {
+                                const maxLen = parseInt(condition.split(':')[1] || '160');
+                                const passed = site.seoDesc.length <= maxLen;
+                                addCheck('策略', passed, `SEO描述过长（${site.seoDesc.length}字符，要求≤${maxLen}）`, action || `描述不超过 ${maxLen} 个字符`, 'medium', site.seoDesc);
+                            }
+                            if (condition === 'required' && !site.seoDesc) {
+                                addCheck('策略', false, '缺少SEO描述', action || '必须设置SEO描述', 'high');
+                            }
+                        }
+                        // 关键词检查
+                        if (field === 'keywords' && condition === 'required' && !site.seoKeywords) {
+                            addCheck('策略', false, '缺少关键词', action || '必须设置关键词', 'medium');
+                        }
+                        // 域名检查
+                        if (field === 'domain' && condition === 'required' && !site.domain) {
+                            addCheck('策略', false, '未绑定域名', action || '必须绑定自定义域名', 'high');
+                        }
+                    }
+                }
             }
-            if (site.seoDesc) {
-                addCheck('优化', site.seoDesc.length <= 160, `SEO 描述过长（${site.seoDesc.length}字符）`, '缩短至 160 字符以内', 'medium', site.seoDesc);
-                addCheck('优化', site.seoDesc.length >= 50, 'SEO 描述过短', '描述至少 50 个字符', 'low', site.seoDesc);
+            else {
+                // ========== 2. 无策略时使用默认规则 ==========
+                // 基础 SEO 检查
+                addCheck('基础', !!site.seoTitle, '缺少 SEO 标题', '为站点设置 SEO 标题（30-60字符）', 'high', site.seoTitle || undefined);
+                addCheck('基础', !!site.seoDesc, '缺少 SEO 描述', '为站点设置 SEO 描述（120-160字符）', 'high', site.seoDesc || undefined);
+                addCheck('基础', !!site.seoKeywords, '缺少关键词', '设置 3-5 个核心关键词', 'medium', site.seoKeywords || undefined);
+                addCheck('基础', !!site.domain, '未绑定域名', '绑定自定义域名提升可信度', 'high', site.domain || undefined);
+                // 长度检查
+                if (site.seoTitle) {
+                    addCheck('优化', site.seoTitle.length <= 60, `SEO 标题过长（${site.seoTitle.length}字符）`, '缩短至 60 字符以内', 'medium', site.seoTitle);
+                    addCheck('优化', site.seoTitle.length >= 10, 'SEO 标题过短', '标题至少 10 个字符', 'low', site.seoTitle);
+                }
+                if (site.seoDesc) {
+                    addCheck('优化', site.seoDesc.length <= 160, `SEO 描述过长（${site.seoDesc.length}字符）`, '缩短至 160 字符以内', 'medium', site.seoDesc);
+                    addCheck('优化', site.seoDesc.length >= 50, 'SEO 描述过短', '描述至少 50 个字符', 'low', site.seoDesc);
+                }
             }
-            // 页面检查
+            // ========== 3. 页面检查（通用） ==========
             const pagesWithoutSeo = site.pages.filter(p => !p.seoTitle || !p.seoDesc).length;
             const publishedPages = site.pages.filter(p => p.status === 'published');
             addCheck('页面', pagesWithoutSeo === 0, `${pagesWithoutSeo} 个页面缺少 SEO 信息`, '为每个页面设置独立的 SEO 标题和描述', 'high');
@@ -854,6 +915,8 @@ router.get('/seo/analysis', async (req, res) => {
                 passed: checks.filter(c => c.passed),
                 pageCount: site.pages.length,
                 publishedPageCount: publishedPages.length,
+                hasStrategies: strategies.length > 0,
+                strategyCount: strategies.length,
                 pages: site.pages.map(p => ({
                     id: p.id,
                     title: p.title,

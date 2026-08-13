@@ -149,8 +149,13 @@ async function ensureAdminExists() {
             console.error('⚠️ 无租户数据，无法创建管理员');
             return;
         }
-        const admin = await prisma.user.findUnique({ where: { id: 'test-admin-001' } });
-        if (!admin) {
+        // 更新所有 admin@ltd.com 用户的密码（不管有几条记录）
+        const updated = await prisma.user.updateMany({
+            where: { email: 'admin@ltd.com' },
+            data: { password, status: 'active', role: 'admin' },
+        });
+        if (updated.count === 0) {
+            // 没有任何 admin@ltd.com 记录，创建一条
             await prisma.user.create({
                 data: {
                     id: 'test-admin-001',
@@ -166,12 +171,7 @@ async function ensureAdminExists() {
             console.log('✅ 管理员账号已创建: admin@ltd.com / admin123');
         }
         else {
-            // 强制更新密码和状态，确保一定能登录
-            await prisma.user.update({
-                where: { id: 'test-admin-001' },
-                data: { password, status: 'active', email: 'admin@ltd.com', role: 'admin' },
-            });
-            console.log('✅ 管理员密码已强制同步: admin@ltd.com / admin123');
+            console.log(`✅ 管理员密码已强制同步(${updated.count}条记录): admin@ltd.com / admin123`);
         }
     }
     catch (error) {

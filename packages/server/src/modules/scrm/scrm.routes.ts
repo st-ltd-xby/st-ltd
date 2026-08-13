@@ -3,7 +3,69 @@ import prisma from '../../common/prisma';
 import { success, successWithPagination, fail, notFound } from '../../common/response';
 import { authMiddleware } from '../../middleware/auth';
 
-const router = Router();
+const router: Router = Router();
+
+// ===== 拜访记录（公开路由，移动端无需登录）=====
+
+router.post('/visits', async (req: Request, res: Response) => {
+  try {
+    const { customerId, customerName, location, address, latitude, longitude, photos, content } = req.body;
+    console.log('📸 收到拜访记录:', {
+      customerId,
+      customerName,
+      photoCount: photos?.length || 0,
+      totalSize: `${(JSON.stringify(photos).length / 1024 / 1024).toFixed(2)}MB`,
+    });
+    
+    const visit = await prisma.visitRecord.create({
+      data: {
+        customerId,
+        customerName,
+        location,
+        address,
+        latitude: latitude ? Number(latitude) : undefined,
+        longitude: longitude ? Number(longitude) : undefined,
+        photos: JSON.stringify(photos || []),
+        content,
+      },
+    });
+    console.log('✅ 拜访记录保存成功:', visit.id);
+    success(res, visit, '拜访记录保存成功');
+  } catch (error: any) {
+    console.error('❌ 保存拜访记录失败:', error.message);
+    fail(res, error.message);
+  }
+});
+
+router.get('/visits', async (req: Request, res: Response) => {
+  try {
+    const { customerId } = req.query;
+    const where: any = {};
+    if (customerId) where.customerId = customerId as string;
+    const visits = await prisma.visitRecord.findMany({
+      where,
+      orderBy: { visitTime: 'desc' },
+    });
+    success(res, visits);
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// 公开客户列表（移动端拜访选择客户用）
+router.get('/customers/public', async (req: Request, res: Response) => {
+  try {
+    const customers = await prisma.customer.findMany({
+      select: { id: true, name: true, contactName: true, contactPhone: true, level: true },
+      orderBy: { updatedAt: 'desc' },
+    });
+    success(res, customers);
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// ===== 以下路由需要认证 =====
 router.use(authMiddleware);
 
 // ===== 线索管理 =====
@@ -115,11 +177,27 @@ router.get('/customers', async (req: Request, res: Response) => {
     }
 
     const [customers, total] = await Promise.all([
-      prisma.customer.findMany({ where, skip, take: Number(pageSize), include: { _count: { select: { contacts: true, opportunities: true } }, visitRecords: { select: { id: true, visitTime: true, photos: true, content: true, location: true, address: true, latitude: true, longitude: true }, orderBy: { visitTime: 'desc' } } }, orderBy: { updatedAt: 'desc' }),
+      prisma.customer.findMany({ 
+        where, 
+        skip, 
+        take: Number(pageSize), 
+        include: { 
+          _count: { select: { contacts: true, opportunities: true } }, 
+          assignee: { select: { id: true, name: true, email: true } },
+          visitRecords: { select: { id: true, visitTime: true, photos: true, content: true, location: true, address: true, latitude: true, longitude: true }, orderBy: { visitTime: 'desc' } } 
+        }, 
+        orderBy: { updatedAt: 'desc' }
+      }),
       prisma.customer.count({ where }),
     ]);
 
-    successWithPagination(res, customers, { page: Number(page), pageSize: Number(pageSize), total });
+    // 映射 assignee.name 为 assigneeName
+    const customersWithAssignee = customers.map(c => ({
+      ...c,
+      assigneeName: c.assignee?.name || null,
+    }));
+
+    successWithPagination(res, customersWithAssignee, { page: Number(page), pageSize: Number(pageSize), total });
   } catch (error: any) {
     fail(res, error.message);
   }
@@ -218,45 +296,6 @@ router.put('/opportunities/:id', async (req: Request, res: Response) => {
 
     const opportunity = await prisma.opportunity.update({ where: { id: req.params.id }, data: data as any });
     success(res, opportunity, '商机更新成功');
-  } catch (error: any) {
-    fail(res, error.message);
-  }
-});
-
-// ===== 拜访记录 =====
-
-router.post('/visits', async (req: Request, res: Response) => {
-  try {
-    const { customerId, customerName, location, address, latitude, longitude, photos, content } = req.body;
-    const visit = await prisma.visitRecord.create({
-      data: {
-        customerId,
-        customerName,
-        userId: req.user!.userId,
-        location,
-        address,
-        latitude: latitude ? Number(latitude) : undefined,
-        longitude: longitude ? Number(longitude) : undefined,
-        photos: JSON.stringify(photos || []),
-        content,
-      },
-    });
-    success(res, visit, '拜访记录保存成功');
-  } catch (error: any) {
-    fail(res, error.message);
-  }
-});
-
-router.get('/visits', async (req: Request, res: Response) => {
-  try {
-    const { customerId } = req.query;
-    const where: any = {};
-    if (customerId) where.customerId = customerId as string;
-    const visits = await prisma.visitRecord.findMany({
-      where,
-      orderBy: { visitTime: 'desc' },
-    });
-    success(res, visits);
   } catch (error: any) {
     fail(res, error.message);
   }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Table, Button, Tag, Space, Modal, Form, Input, Select, Tabs, message, Typography, Drawer, Descriptions, Timeline, Divider, Card, Empty, Steps } from 'antd';
-import { PlusOutlined, EyeOutlined, PhoneOutlined, CameraOutlined, EnvironmentOutlined, UserOutlined, StarOutlined, CheckCircleOutlined, ClockCircleOutlined } from '@ant-design/icons';
+import { PlusOutlined, EyeOutlined, PhoneOutlined, CameraOutlined, EnvironmentOutlined, UserOutlined, StarOutlined, CheckCircleOutlined, ClockCircleOutlined, ReloadOutlined } from '@ant-design/icons';
 import { scrmApi } from '../../services/api';
 const { Title } = Typography;
 
@@ -9,6 +9,7 @@ const levelColors: Record<string, string> = { A: 'red', B: 'orange', C: 'blue' }
 export default function Customers() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0); // 用于强制刷新
   const [modalOpen, setModalOpen] = useState(false);
   const [form] = Form.useForm();
 
@@ -16,7 +17,7 @@ export default function Customers() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [currentCustomer, setCurrentCustomer] = useState<any>(null);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [refreshKey]); // 依赖 refreshKey 实现强制刷新
 
   const load = async () => {
     setLoading(true);
@@ -41,13 +42,34 @@ export default function Customers() {
 
   // 获取电话联络记录
   const getPhoneRecords = (customer: any) => customer.phoneRecords || [];
-  // 获取拜访记录（后端返回 photos 为 JSON 字符串，需解析）
+  
+  // 获取拜访记录（优先从 localStorage 读取，后端数据作为补充）
   const getVisitRecords = (customer: any) => {
-    const records = customer.visitRecords || [];
-    return records.map((r: any) => ({
+    console.log(' getVisitRecords 被调用 - customerId:', customer.id, 'customerName:', customer.name);
+    
+    // 1. 先从 localStorage 读取本地存储的拜访记录
+    const customerVisitsKey = `visits_customer_${customer.id}`;
+    const localVisits = JSON.parse(localStorage.getItem(customerVisitsKey) || '[]');
+    console.log(`💾 localStorage.${customerVisitsKey}:`, localVisits.length, '条记录');
+    if (localVisits.length > 0) {
+      console.log(' 第一条记录的photos:', localVisits[0].photos?.map((p: string, i: number) => ({ index: i, length: p.length })));
+    }
+    
+    // 2. 合并后端返回的拜访记录
+    const backendVisits = customer.visitRecords || [];
+    const parsedBackendVisits = backendVisits.map((r: any) => ({
       ...r,
       photos: typeof r.photos === 'string' ? (() => { try { return JSON.parse(r.photos); } catch { return []; } })() : (r.photos || []),
     }));
+    
+    // 3. 合并并去重（以 id 为准）
+    const allVisits = [...localVisits, ...parsedBackendVisits];
+    const uniqueVisits = Array.from(
+      new Map(allVisits.map(v => [v.id, v])).values()
+    );
+    
+    console.log('✅ 最终返回', uniqueVisits.length, '条拜访记录');
+    return uniqueVisits;
   };
   // 关联商机
   const getOpportunities = (customer: any) => customer.opportunities || [];
@@ -66,7 +88,16 @@ export default function Customers() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
         <Title level={4} style={{ margin: 0 }}>客户管理</Title>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>新建客户</Button>
+        <Space>
+          <Button 
+            icon={<ReloadOutlined />} 
+            onClick={() => setRefreshKey(prev => prev + 1)} // 强制触发重新渲染
+            loading={loading}
+          >
+            刷新
+          </Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>新建客户</Button>
+        </Space>
       </div>
       <Tabs
         items={[

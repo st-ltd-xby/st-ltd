@@ -353,7 +353,6 @@ const PromotionCenter: React.FC = () => {
         <Tabs activeKey={activeTab} onChange={setActiveTab}>
           <TabPane tab="页面推广" key="promotion">{renderPromotionTab()}</TabPane>
           <TabPane tab="追踪链接" key="tracking">{renderTrackingTab()}</TabPane>
-          <TabPane tab="SEO优化" key="seo">{renderSeoTab()}</TabPane>
           <TabPane tab="SEO策略管理" key="seo-strategy">{renderSeoStrategyTab()}</TabPane>
         </Tabs>
       </Card>

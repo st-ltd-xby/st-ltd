@@ -18,7 +18,7 @@ const AdminLogin: React.FC = () => {
   const onFinish = async (values: LoginFormValues) => {
     setLoading(true);
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/v1/auth/admin-login`, {
+      const response = await axios.post(`${API_BASE_URL}/api/v1/admin-auth/admin-login`, {
         email: values.username,
         password: values.password
       });

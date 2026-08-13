@@ -1,20 +1,39 @@
 import { useEffect, useState } from 'react';
-import { Table, Tag, Space, Button, Typography, message, Modal, Form, Input, InputNumber, Select, Drawer, Descriptions, Divider } from 'antd';
-import { PlusOutlined, EditOutlined, EyeOutlined } from '@ant-design/icons';
+import { Table, Tag, Space, Button, Typography, message, Modal, Form, Input, InputNumber, Select, Drawer, Descriptions, Divider, Steps, Timeline, Empty, Card, Tabs } from 'antd';
+import { PlusOutlined, EditOutlined, EyeOutlined, PhoneOutlined, CameraOutlined, FileTextOutlined, SwapOutlined, CheckCircleOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { scrmApi } from '../../services/api';
 const { Title } = Typography;
 
-const stageColors: Record<string, string> = {
-  pending: 'default',
-  following: 'blue',
-  proposal: 'cyan',
-  negotiation: 'gold',
-  won: 'green',
-  lost: 'red',
+// 商机三项任务（管理后台启动，前端展示执行成果）
+const taskConfig: Record<string, { label: string; color: string; stage: string }> = {
+  project_publish: { label: '项目发布', color: 'orange', stage: 'project_publish' },
+  project_docking: { label: '项目对接', color: 'purple', stage: 'project_docking' },
+  project_landing: { label: '项目落地', color: 'red', stage: 'project_landing' },
+};
+const taskOrder = ['project_publish', 'project_docking', 'project_landing'];
+
+// 全部五阶段（用于进度条）
+const stageConfig: Record<string, { label: string; color: string }> = {
+  phone_contact: { label: '电话联络', color: 'blue' },
+  customer_visit: { label: '客户拜访', color: 'green' },
+  project_publish: { label: '项目发布', color: 'orange' },
+  project_docking: { label: '项目对接', color: 'purple' },
+  project_landing: { label: '项目落地', color: 'red' },
 };
 
-const stageOrder = ['pending', 'following', 'proposal', 'negotiation', 'won', 'lost'];
+const getStageIcon = (stage: string) => {
+  switch (stage) {
+    case 'phone_contact': return <PhoneOutlined />;
+    case 'customer_visit': return <CameraOutlined />;
+    case 'project_publish': return <FileTextOutlined />;
+    case 'project_docking': return <SwapOutlined />;
+    case 'project_landing': return <CheckCircleOutlined />;
+    default: return null;
+  }
+};
+
+const stageOrder = ['phone_contact', 'customer_visit', 'project_publish', 'project_docking', 'project_landing'];
 
 export default function Opportunities() {
   const { t } = useTranslation();
@@ -27,15 +46,6 @@ export default function Opportunities() {
   const [currentOpp, setCurrentOpp] = useState<any>(null);
   const [form] = Form.useForm();
   const [createForm] = Form.useForm();
-
-  const stageLabels: Record<string, string> = {
-    pending: t('opportunities.pending'),
-    following: t('opportunities.following'),
-    proposal: t('opportunities.proposal'),
-    negotiation: t('opportunities.negotiation'),
-    won: t('opportunities.won'),
-    lost: t('opportunities.lost'),
-  };
 
   const typeLabels: Record<string, string> = {
     supply_demand: t('opportunities.supplyDemand'),
@@ -53,11 +63,8 @@ export default function Opportunities() {
     setLoading(true);
     try {
       const res: any = await scrmApi.getOpportunities();
-      if (res.code === 0) {
-        setOpps(res.data || []);
-      } else {
-        message.error('加载失败');
-      }
+      if (res.code === 0) setOpps(res.data || []);
+      else message.error('加载失败');
     } catch {
       message.error(t('opportunities.networkError'));
     } finally {
@@ -68,10 +75,8 @@ export default function Opportunities() {
   const loadCustomers = async () => {
     try {
       const res: any = await scrmApi.getCustomers({ page: 1, pageSize: 200 });
-      if (res.code === 0) {
-        setCustomers(res.data?.list || res.data || []);
-      }
-    } catch { /* ignore */ }
+      if (res.code === 0) setCustomers(res.data?.list || res.data || []);
+    } catch {}
   };
 
   const handleCreate = async () => {
@@ -117,7 +122,7 @@ export default function Opportunities() {
   const handleQuickStage = async (opp: any, newStage: string) => {
     const res: any = await scrmApi.updateOpportunity(opp.id, { stage: newStage });
     if (res.code === 0) {
-      message.success(t('opportunities.updatedTo', { stage: stageLabels[newStage] }));
+      message.success(`已推进到：${stageConfig[newStage]?.label}`);
       loadOpportunities();
     } else {
       message.error(t('opportunities.updateFailed'));
@@ -131,6 +136,19 @@ export default function Opportunities() {
       expectedCloseDate: opp.expectedCloseDate ? new Date(opp.expectedCloseDate) : undefined,
     });
     setEditModal(true);
+  };
+
+  // 获取当前阶段索引
+  const getStageIndex = (stage: string) => stageOrder.indexOf(stage);
+
+  // 获取阶段成果
+  const getStageAchievements = (opp: any) => opp.stageAchievements || {};
+
+  // 判断任务完成状态
+  const isTaskDone = (opp: any, task: string) => {
+    const idx = getStageIndex(opp.stage);
+    const taskIdx = taskOrder.indexOf(task);
+    return idx >= taskIdx;
   };
 
   const columns = [
@@ -159,16 +177,17 @@ export default function Opportunities() {
       render: (v: string) => <Tag color="blue">{typeLabels[v] || v || '-'}</Tag>,
     },
     {
-      title: t('opportunities.stage'),
+      title: '当前阶段',
       dataIndex: 'stage',
       key: 'stage',
-      width: 120,
+      width: 160,
       render: (v: string, record: any) => {
-        const idx = stageOrder.indexOf(v);
+        const idx = getStageIndex(v);
         const nextStage = idx < stageOrder.length - 1 ? stageOrder[idx + 1] : null;
+        const config = stageConfig[v];
         return (
           <Space size={4}>
-            <Tag color={stageColors[v] || 'default'} style={{ cursor: 'default' }}>{stageLabels[v] || v}</Tag>
+            <Tag color={config?.color}>{getStageIcon(v)} {config?.label || v}</Tag>
             {nextStage && (
               <Button
                 type="link"
@@ -176,7 +195,7 @@ export default function Opportunities() {
                 style={{ padding: 0, fontSize: 12, color: '#1677ff' }}
                 onClick={() => handleQuickStage(record, nextStage)}
               >
-                → {stageLabels[nextStage]}
+                → {stageConfig[nextStage]?.label}
               </Button>
             )}
           </Space>
@@ -200,16 +219,22 @@ export default function Opportunities() {
       render: (v: number) => <span style={{ color: v >= 80 ? '#52c41a' : v >= 50 ? '#faad14' : '#999' }}>{v || 0}%</span>,
     },
     {
-      title: t('opportunities.expectedCloseDate'),
-      dataIndex: 'expectedCloseDate',
-      key: 'expectedCloseDate',
-      width: 110,
-      render: (d: string) => d ? new Date(d).toLocaleDateString() : '-',
+      title: '进度',
+      key: 'progress',
+      width: 120,
+      render: (_: any, record: any) => {
+        const idx = getStageIndex(record.stage);
+        return (
+          <span style={{ fontSize: 12, color: '#888' }}>
+            {idx + 1} / {stageOrder.length}
+          </span>
+        );
+      },
     },
     {
       title: t('common.action'),
       key: 'action',
-      width: 120,
+      width: 100,
       fixed: 'right' as const,
       render: (_: any, record: any) => (
         <Space size="small">
@@ -270,12 +295,11 @@ export default function Opportunities() {
                 <Select.Option value="resource">{t('opportunities.resourceDocking')}</Select.Option>
               </Select>
             </Form.Item>
-            <Form.Item name="stage" label={t('opportunities.stage')} initialValue="pending" style={{ flex: 1 }}>
+            <Form.Item name="stage" label="起始阶段" initialValue="phone_contact" style={{ flex: 1 }}>
               <Select>
-                <Select.Option value="pending">{t('opportunities.pending')}</Select.Option>
-                <Select.Option value="following">{t('opportunities.following')}</Select.Option>
-                <Select.Option value="proposal">{t('opportunities.proposal')}</Select.Option>
-                <Select.Option value="negotiation">{t('opportunities.negotiation')}</Select.Option>
+                {stageOrder.map(s => (
+                  <Select.Option key={s} value={s}>{stageConfig[s].label}</Select.Option>
+                ))}
               </Select>
             </Form.Item>
           </div>
@@ -311,14 +335,11 @@ export default function Opportunities() {
             <Input />
           </Form.Item>
           <div style={{ display: 'flex', gap: 16 }}>
-            <Form.Item name="stage" label={t('opportunities.stage')} style={{ flex: 1 }}>
+            <Form.Item name="stage" label="当前阶段" style={{ flex: 1 }}>
               <Select>
-                <Select.Option value="pending">{t('opportunities.pending')}</Select.Option>
-                <Select.Option value="following">{t('opportunities.following')}</Select.Option>
-                <Select.Option value="proposal">{t('opportunities.proposal')}</Select.Option>
-                <Select.Option value="negotiation">{t('opportunities.negotiation')}</Select.Option>
-                <Select.Option value="won">{t('opportunities.won')}</Select.Option>
-                <Select.Option value="lost">{t('opportunities.lost')}</Select.Option>
+                {stageOrder.map(s => (
+                  <Select.Option key={s} value={s}>{stageConfig[s].label}</Select.Option>
+                ))}
               </Select>
             </Form.Item>
             <Form.Item name="probability" label={`${t('opportunities.winRate')}(%)`} style={{ flex: 1 }}>
@@ -341,47 +362,142 @@ export default function Opportunities() {
 
       {/* 查看详情抽屉 */}
       <Drawer
-        title={t('opportunities.opportunityDetail')}
+        title={currentOpp?.title || t('opportunities.opportunityDetail')}
         open={viewDrawer}
         onClose={() => setViewDrawer(false)}
-        width={480}
+        width={640}
       >
-        {currentOpp && (
-          <>
-            <Descriptions column={1} bordered size="small">
-              <Descriptions.Item label={t('opportunities.opportunityName')}>{currentOpp.title || '-'}</Descriptions.Item>
-              <Descriptions.Item label={t('opportunities.customer')}>{currentOpp.customer?.name || '-'}</Descriptions.Item>
-              <Descriptions.Item label={t('opportunities.type')}>{typeLabels[currentOpp.type] || currentOpp.type || '-'}</Descriptions.Item>
-              <Descriptions.Item label={t('opportunities.stage')}>
-                <Tag color={stageColors[currentOpp.stage]}>{stageLabels[currentOpp.stage] || currentOpp.stage}</Tag>
-              </Descriptions.Item>
-              <Descriptions.Item label={t('opportunities.estimatedAmount')}>{currentOpp.amount ? `¥${Number(currentOpp.amount).toLocaleString()}` : '-'}</Descriptions.Item>
-              <Descriptions.Item label={t('opportunities.winRate')}>{currentOpp.probability || 0}%</Descriptions.Item>
-              <Descriptions.Item label={t('opportunities.expectedCloseDate')}>{currentOpp.expectedCloseDate ? new Date(currentOpp.expectedCloseDate).toLocaleDateString() : '-'}</Descriptions.Item>
-              <Descriptions.Item label={t('opportunities.counterparty')}>{currentOpp.counterparty || '-'}</Descriptions.Item>
-              <Descriptions.Item label={t('customers.industry')}>{currentOpp.industry || '-'}</Descriptions.Item>
-            </Descriptions>
-            {currentOpp.description && (
-              <>
-                <Divider style={{ margin: '16px 0 8px' }}>{t('common.description')}</Divider>
-                <div style={{ color: '#555', lineHeight: 1.8, fontSize: 14 }}>{currentOpp.description}</div>
-              </>
-            )}
-            {currentOpp.note && (
-              <>
-                <Divider style={{ margin: '16px 0 8px' }}>{t('opportunities.note')}</Divider>
-                <div style={{ color: '#555', lineHeight: 1.8, fontSize: 14 }}>{currentOpp.note}</div>
-              </>
-            )}
-            <Divider style={{ margin: '16px 0 8px' }}>{t('opportunities.timeInfo')}</Divider>
-            <div style={{ fontSize: 13, color: '#999', lineHeight: 2 }}>
-              <div>{t('common.createdAt')}：{currentOpp.createdAt ? new Date(currentOpp.createdAt).toLocaleString() : '-'}</div>
-              <div>{t('common.updatedAt')}：{currentOpp.updatedAt ? new Date(currentOpp.updatedAt).toLocaleString() : '-'}</div>
-              {currentOpp.wonAt && <div style={{ color: '#52c41a' }}>{t('opportunities.wonTime')}：{new Date(currentOpp.wonAt).toLocaleString()}</div>}
-              {currentOpp.lostAt && <div style={{ color: '#ff4d4f' }}>{t('opportunities.lostTime')}：{new Date(currentOpp.lostAt).toLocaleString()}</div>}
-            </div>
-          </>
-        )}
+        {currentOpp && (() => {
+          const currentIdx = getStageIndex(currentOpp.stage);
+          const achievements = getStageAchievements(currentOpp);
+
+          return (
+            <Tabs defaultActiveKey="overview">
+              {/* 概览 */}
+              <Tabs.TabPane tab="概览" key="overview">
+                {/* 五阶段进度条 */}
+                <Card size="small" style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 13, color: '#888', marginBottom: 8 }}>全流程进度</div>
+                  <Steps
+                    current={currentIdx}
+                    size="small"
+                    items={stageOrder.map((s) => ({
+                      title: stageConfig[s].label,
+                      status: stageOrder.indexOf(s) < currentIdx ? 'finish' : stageOrder.indexOf(s) === currentIdx ? 'process' : 'wait',
+                      icon: getStageIcon(s),
+                    }))}
+                  />
+                </Card>
+
+                {/* 三项任务状态 */}
+                <Card size="small" title="任务进度" style={{ marginBottom: 16 }}>
+                  <Steps
+                    current={taskOrder.filter(t => isTaskDone(currentOpp, t)).length}
+                    size="small"
+                    items={taskOrder.map((task) => ({
+                      title: taskConfig[task].label,
+                      status: isTaskDone(currentOpp, task) ? 'finish' : 'wait',
+                      icon: isTaskDone(currentOpp, task) ? <CheckCircleOutlined /> : getStageIcon(task),
+                      description: isTaskDone(currentOpp, task) ? '已完成' : '待执行',
+                    }))}
+                  />
+                </Card>
+
+                {/* 基本信息 */}
+                <Descriptions column={2} bordered size="small">
+                  <Descriptions.Item label="商机名称" span={2}><strong>{currentOpp.title}</strong></Descriptions.Item>
+                  <Descriptions.Item label="关联客户">{currentOpp.customer?.name || '-'}</Descriptions.Item>
+                  <Descriptions.Item label="类型">{typeLabels[currentOpp.type] || currentOpp.type || '-'}</Descriptions.Item>
+                  <Descriptions.Item label="金额">{currentOpp.amount ? `¥${Number(currentOpp.amount).toLocaleString()}` : '-'}</Descriptions.Item>
+                  <Descriptions.Item label="概率">{currentOpp.probability || 0}%</Descriptions.Item>
+                  <Descriptions.Item label="预计成交">{currentOpp.expectedCloseDate ? new Date(currentOpp.expectedCloseDate).toLocaleDateString() : '-'}</Descriptions.Item>
+                  <Descriptions.Item label="对方单位">{currentOpp.counterparty || '-'}</Descriptions.Item>
+                </Descriptions>
+              </Tabs.TabPane>
+
+              {/* 项目发布 */}
+              <Tabs.TabPane tab={<span>{isTaskDone(currentOpp, 'project_publish') ? <CheckCircleOutlined style={{color:'#52c41a'}} /> : <FileTextOutlined />} 项目发布 {isTaskDone(currentOpp, 'project_publish') && <Tag color="green" style={{marginLeft:4}}>已完成</Tag>}</span>} key="publish">
+                {isTaskDone(currentOpp, 'project_publish') ? (
+                  <div>
+                    {achievements.project_publish ? (
+                      <div>
+                        <div style={{ marginBottom: 8 }}>{achievements.project_publish.content}</div>
+                        {achievements.project_publish.time && (
+                          <div style={{ fontSize: 12, color: '#999' }}>完成时间：{new Date(achievements.project_publish.time).toLocaleString()}</div>
+                        )}
+                        {achievements.project_publish.photos && (
+                          <div style={{ fontSize: 13, color: '#1890ff', marginTop: 8 }}> 附件 {achievements.project_publish.photos.length} 个</div>
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ textAlign: 'center', padding: 30 }}>
+                        <CheckCircleOutlined style={{ fontSize: 48, color: '#52c41a', marginBottom: 12 }} />
+                        <div style={{ fontSize: 16, fontWeight: 600, color: '#52c41a' }}>项目发布已完成</div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <Empty description="任务待执行" image={Empty.PRESENTED_IMAGE_SIMPLE}>
+                    <div style={{ color: '#999' }}>等待管理后台启动"项目发布"任务</div>
+                  </Empty>
+                )}
+              </Tabs.TabPane>
+
+              {/* 项目对接 */}
+              <Tabs.TabPane tab={<span>{isTaskDone(currentOpp, 'project_docking') ? <CheckCircleOutlined style={{color:'#52c41a'}} /> : <SwapOutlined />} 项目对接 {isTaskDone(currentOpp, 'project_docking') && <Tag color="green" style={{marginLeft:4}}>已完成</Tag>}</span>} key="docking">
+                {isTaskDone(currentOpp, 'project_docking') ? (
+                  <div>
+                    {achievements.project_docking ? (
+                      <div>
+                        <div style={{ marginBottom: 8 }}>{achievements.project_docking.content}</div>
+                        {achievements.project_docking.time && (
+                          <div style={{ fontSize: 12, color: '#999' }}>完成时间：{new Date(achievements.project_docking.time).toLocaleString()}</div>
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ textAlign: 'center', padding: 30 }}>
+                        <CheckCircleOutlined style={{ fontSize: 48, color: '#52c41a', marginBottom: 12 }} />
+                        <div style={{ fontSize: 16, fontWeight: 600, color: '#52c41a' }}>项目对接已完成</div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <Empty description="任务待执行" image={Empty.PRESENTED_IMAGE_SIMPLE}>
+                    <div style={{ color: '#999' }}>等待管理后台启动"项目对接"任务</div>
+                  </Empty>
+                )}
+              </Tabs.TabPane>
+
+              {/* 项目落地 */}
+              <Tabs.TabPane tab={<span>{isTaskDone(currentOpp, 'project_landing') ? <CheckCircleOutlined style={{color:'#52c41a'}} /> : <CheckCircleOutlined />} 项目落地 {isTaskDone(currentOpp, 'project_landing') && <Tag color="green" style={{marginLeft:4}}>已完成</Tag>}</span>} key="landing">
+                {isTaskDone(currentOpp, 'project_landing') ? (
+                  <div>
+                    {achievements.project_landing ? (
+                      <div>
+                        <div style={{ marginBottom: 8 }}>{achievements.project_landing.content}</div>
+                        {achievements.project_landing.time && (
+                          <div style={{ fontSize: 12, color: '#999' }}>完成时间：{new Date(achievements.project_landing.time).toLocaleString()}</div>
+                        )}
+                        {achievements.project_landing.photos && (
+                          <div style={{ fontSize: 13, color: '#1890ff', marginTop: 8 }}>📷 成果照片 {achievements.project_landing.photos.length} 张</div>
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ textAlign: 'center', padding: 30 }}>
+                        <CheckCircleOutlined style={{ fontSize: 48, color: '#52c41a', marginBottom: 12 }} />
+                        <div style={{ fontSize: 16, fontWeight: 600, color: '#52c41a' }}>项目已落地</div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <Empty description="任务待执行" image={Empty.PRESENTED_IMAGE_SIMPLE}>
+                    <div style={{ color: '#999' }}>等待管理后台启动"项目落地"任务</div>
+                  </Empty>
+                )}
+              </Tabs.TabPane>
+            </Tabs>
+          );
+        })()}
       </Drawer>
     </div>
   );

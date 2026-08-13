@@ -269,6 +269,7 @@ model Customer {
   address       String?
   website       String?
   leadId        String?     @unique
+  assigneeId    String?       // 对接人ID
   tags          String
   totalDeal     Float         @default(0)
   note          String?
@@ -279,9 +280,12 @@ model Customer {
   tenant        Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   opportunities Opportunity[]
   visitRecords  VisitRecord[]
+  followUps     FollowUp[]    // 客户跟进记录
+  assignee      User?       @relation("CustomerAssignee", fields: [assigneeId], references: [id])
 
   @@index([tenantId, level])
   @@index([tenantId, stage])
+  @@index([assigneeId])
 }
 
 model VisitRecord {
@@ -320,17 +324,20 @@ model Contact {
 
 model FollowUp {
   id         String    @id @default(cuid())
-  leadId     String
+  leadId     String?
+  customerId String?       // 客户跟进
   userId     String
   type       String
   content    String
   nextAction String?
   nextTime   DateTime?
   createdAt  DateTime  @default(now())
-  lead       Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  lead       Lead?     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
   user       User      @relation(fields: [userId], references: [id])
 
   @@index([leadId, createdAt])
+  @@index([customerId, createdAt])
 }
 
 model Opportunity {

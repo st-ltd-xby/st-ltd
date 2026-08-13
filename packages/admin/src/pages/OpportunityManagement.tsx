@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import {
   Card, Table, Button, Space, Input, Modal, Form, message, Select, Tag,
-  Row, Col, Statistic, Tooltip, Popconfirm, DatePicker, InputNumber
+  Row, Col, Statistic, Tooltip, Popconfirm, DatePicker, InputNumber,
+  Drawer, Descriptions, Steps, Timeline, Empty, Divider
 } from 'antd';
 import {
   SearchOutlined, PlusOutlined, EditOutlined, DeleteOutlined, EyeOutlined,
-  FundOutlined, SwapOutlined, FileTextOutlined, TeamOutlined, GiftOutlined
+  FundOutlined, SwapOutlined, FileTextOutlined, TeamOutlined, GiftOutlined,
+  PlayCircleOutlined, CheckCircleOutlined, ClockCircleOutlined, RocketOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
@@ -29,6 +31,18 @@ const OpportunityManagement: React.FC = () => {
   const [customers, setCustomers] = useState<any[]>([]);
 
   const [stats, setStats] = useState({ total: 0, pending: 0, following: 0, won: 0, totalAmount: 0 });
+
+  // 任务管理抽屉
+  const [taskDrawerOpen, setTaskDrawerOpen] = useState(false);
+  const [taskOpp, setTaskOpp] = useState<any>(null);
+  const [taskForm] = Form.useForm();
+
+  // 商机三项任务
+  const taskList = [
+    { key: 'project_publish', label: '项目发布', icon: <FileTextOutlined />, color: 'orange', stage: 'project_publish', desc: '发布项目信息到平台，供潜在合作方浏览' },
+    { key: 'project_docking', label: '项目对接', icon: <SwapOutlined />, color: 'purple', stage: 'project_docking', desc: '与意向方进行商务对接、洽谈合作细节' },
+    { key: 'project_landing', label: '项目落地', icon: <CheckCircleOutlined />, color: 'red', stage: 'project_landing', desc: '签署合同/协议，项目正式落地执行' },
+  ];
 
   const getToken = () => localStorage.getItem('adminToken');
   const getHeaders = () => ({ Authorization: `Bearer ${getToken()}` });
@@ -119,6 +133,57 @@ const OpportunityManagement: React.FC = () => {
     }
   };
 
+  // 打开任务管理抽屉
+  const openTaskDrawer = (opp: any) => {
+    setTaskOpp(opp);
+    setTaskDrawerOpen(true);
+  };
+
+  // 启动/完成任务
+  const handleStartTask = async (taskKey: string) => {
+    if (!taskOpp) return;
+    const task = taskList.find(t => t.key === taskKey);
+    if (!task) return;
+
+    Modal.confirm({
+      title: `启动「${task.label}」任务`,
+      content: `确定为商机「${taskOpp.title}」启动${task.label}任务吗？启动后将推进阶段到${task.label}。`,
+      okText: '确认启动',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          const res = await axios.put(`${API_BASE}/opportunities/${taskOpp.id}`, {
+            stage: task.stage,
+          }, { headers: getHeaders() });
+          if (res.data.code === 0 || res.data.code === 200) {
+            message.success(`已启动「${task.label}」任务，阶段已推进`);
+            fetchOpportunities(pagination.current);
+            // 更新抽屉中的商机数据
+            setTaskOpp((prev: any) => prev ? { ...prev, stage: task.stage } : prev);
+          } else {
+            message.error('操作失败');
+          }
+        } catch {
+          message.error('操作失败');
+        }
+      },
+    });
+  };
+
+  // 判断任务是否已完成
+  const isTaskCompleted = (opp: any, taskKey: string) => {
+    if (!opp) return false;
+    const stageOrder = ['phone_contact', 'customer_visit', 'project_publish', 'project_docking', 'project_landing'];
+    const taskStageMap: Record<string, string> = {
+      project_publish: 'project_publish',
+      project_docking: 'project_docking',
+      project_landing: 'project_landing',
+    };
+    const currentIdx = stageOrder.indexOf(opp.stage);
+    const taskIdx = stageOrder.indexOf(taskStageMap[taskKey]);
+    return currentIdx >= taskIdx;
+  };
+
   const typeConfig: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
     supply_demand: { label: '供需信息', color: 'blue', icon: <SwapOutlined /> },
     bidding: { label: '招投标', color: 'orange', icon: <FileTextOutlined /> },
@@ -127,12 +192,18 @@ const OpportunityManagement: React.FC = () => {
   };
 
   const stageColors: Record<string, string> = {
-    pending: 'default', following: 'processing', proposal: 'cyan',
-    negotiation: 'gold', won: 'green', lost: 'red'
+    phone_contact: 'blue',
+    customer_visit: 'cyan',
+    project_publish: 'purple',
+    project_docking: 'gold',
+    project_landing: 'green'
   };
   const stageLabels: Record<string, string> = {
-    pending: '待确认', following: '跟进中', proposal: '方案/报价',
-    negotiation: '谈判中', won: '已成交', lost: '已流失'
+    phone_contact: '电话联络',
+    customer_visit: '客户拜访',
+    project_publish: '项目发布',
+    project_docking: '项目对接',
+    project_landing: '项目落地'
   };
 
   const columns = [
@@ -214,6 +285,9 @@ const OpportunityManagement: React.FC = () => {
               form.setFieldsValue(values);
               setIsEditModal(true);
             }} />
+          </Tooltip>
+          <Tooltip title="任务管理">
+            <Button type="link" size="small" icon={<RocketOutlined />} style={{ color: '#722ed1' }} onClick={() => openTaskDrawer(record)} />
           </Tooltip>
           <Popconfirm title="确定删除此商机？" onConfirm={() => handleDelete(record.id)}>
             <Button type="link" size="small" danger icon={<DeleteOutlined />} />
@@ -373,14 +447,13 @@ const OpportunityManagement: React.FC = () => {
               <Option value="trade">买卖关系</Option>
               <Option value="resource">资源对接</Option>
             </Select>
-            <Select value={stageFilter} onChange={setStageFilter} style={{ width: 120 }}>
+            <Select value={stageFilter} onChange={setStageFilter} style={{ width: 130 }}>
               <Option value="all">全部阶段</Option>
-              <Option value="pending">待确认</Option>
-              <Option value="following">跟进中</Option>
-              <Option value="proposal">方案/报价</Option>
-              <Option value="negotiation">谈判中</Option>
-              <Option value="won">已成交</Option>
-              <Option value="lost">已流失</Option>
+              <Option value="phone_contact">电话联络</Option>
+              <Option value="customer_visit">客户拜访</Option>
+              <Option value="project_publish">项目发布</Option>
+              <Option value="project_docking">项目对接</Option>
+              <Option value="project_landing">项目落地</Option>
             </Select>
           </Space>
           <Button type="primary" icon={<PlusOutlined />} onClick={() => {
@@ -432,12 +505,13 @@ const OpportunityManagement: React.FC = () => {
               </Form.Item>
             </Col>
             <Col span={8}>
-              <Form.Item name="stage" label="阶段" initialValue="pending">
+              <Form.Item name="stage" label="阶段" initialValue="phone_contact">
                 <Select>
-                  <Option value="pending">待确认</Option>
-                  <Option value="following">跟进中</Option>
-                  <Option value="proposal">方案/报价</Option>
-                  <Option value="negotiation">谈判中</Option>
+                  <Option value="phone_contact">电话联络</Option>
+                  <Option value="customer_visit">客户拜访</Option>
+                  <Option value="project_publish">项目发布</Option>
+                  <Option value="project_docking">项目对接</Option>
+                  <Option value="project_landing">项目落地</Option>
                 </Select>
               </Form.Item>
             </Col>
@@ -473,6 +547,108 @@ const OpportunityManagement: React.FC = () => {
         </Form>
       </Modal>
 
+      {/* 任务管理抽屉 */}
+      <Drawer
+        title={taskOpp ? `任务管理 - ${taskOpp.title}` : '任务管理'}
+        open={taskDrawerOpen}
+        onClose={() => { setTaskDrawerOpen(false); setTaskOpp(null); }}
+        width={600}
+      >
+        {taskOpp && (() => {
+          const stageOrder = ['phone_contact', 'customer_visit', 'project_publish', 'project_docking', 'project_landing'];
+          const currentIdx = stageOrder.indexOf(taskOpp.stage);
+
+          return (
+            <div>
+              {/* 商机基本信息 */}
+              <Card size="small" style={{ marginBottom: 20 }}>
+                <Descriptions column={2} size="small">
+                  <Descriptions.Item label="商机名称" span={2}><strong>{taskOpp.title}</strong></Descriptions.Item>
+                  <Descriptions.Item label="关联客户">{taskOpp.customer?.name || '-'}</Descriptions.Item>
+                  <Descriptions.Item label="当前阶段">
+                    <Tag color={stageColors[taskOpp.stage]}>{stageLabels[taskOpp.stage] || taskOpp.stage}</Tag>
+                  </Descriptions.Item>
+                  <Descriptions.Item label="金额">{taskOpp.amount ? `¥${Number(taskOpp.amount).toLocaleString()}` : '-'}</Descriptions.Item>
+                  <Descriptions.Item label="概率">{taskOpp.probability || 0}%</Descriptions.Item>
+                </Descriptions>
+              </Card>
+
+              {/* 全流程进度 */}
+              <Card size="small" title="全流程进度" style={{ marginBottom: 20 }}>
+                <Steps
+                  current={currentIdx}
+                  size="small"
+                  items={stageOrder.map((s) => ({
+                    title: stageLabels[s],
+                    status: stageOrder.indexOf(s) < currentIdx ? 'finish' : stageOrder.indexOf(s) === currentIdx ? 'process' : 'wait',
+                  }))}
+                />
+              </Card>
+
+              {/* 三项任务卡片 */}
+              <Divider orientation="left" style={{ fontSize: 15, fontWeight: 600 }}>
+                <RocketOutlined style={{ marginRight: 6 }} />商机任务（启动后前端可见）
+              </Divider>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {taskList.map((task, idx) => {
+                  const completed = isTaskCompleted(taskOpp, task.key);
+                  const prevCompleted = idx === 0 || isTaskCompleted(taskOpp, taskList[idx - 1].key);
+
+                  return (
+                    <Card
+                      key={task.key}
+                      size="small"
+                      style={{
+                        borderLeft: `3px solid ${completed ? '#52c41a' : task.color === 'orange' ? '#faad14' : task.color === 'purple' ? '#722ed1' : '#f5222d'}`,
+                        background: completed ? '#f6ffed' : '#fff',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <Space>
+                            {task.icon}
+                            <span style={{ fontSize: 15, fontWeight: 600 }}>{task.label}</span>
+                            {completed ? (
+                              <Tag color="success" icon={<CheckCircleOutlined />}>已完成</Tag>
+                            ) : (
+                              <Tag color="default" icon={<ClockCircleOutlined />}>待启动</Tag>
+                            )}
+                          </Space>
+                          <div style={{ color: '#888', fontSize: 13, marginTop: 4, marginLeft: 24 }}>
+                            {task.desc}
+                          </div>
+                        </div>
+                        <div>
+                          {completed ? (
+                            <Tag color="success" style={{ fontSize: 13, padding: '4px 12px' }}>✓ 已推进</Tag>
+                          ) : (
+                            <Button
+                              type="primary"
+                              icon={<PlayCircleOutlined />}
+                              disabled={!prevCompleted}
+                              onClick={() => handleStartTask(task.key)}
+                              style={{ background: '#722ed1', borderColor: '#722ed1' }}
+                            >
+                              启动任务
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+
+              {/* 提示信息 */}
+              <div style={{ marginTop: 20, padding: 12, background: '#e6f7ff', borderRadius: 6, fontSize: 13, color: '#1890ff' }}>
+                💡 任务按顺序启动：项目发布 → 项目对接 → 项目落地。启动后前端 Web 将实时展示任务完成状态。
+              </div>
+            </div>
+          );
+        })()}
+      </Drawer>
+
       {/* 编辑商机 */}
       <Modal
         title="编辑商机"
@@ -501,12 +677,11 @@ const OpportunityManagement: React.FC = () => {
             <Col span={8}>
               <Form.Item name="stage" label="阶段">
                 <Select>
-                  <Option value="pending">待确认</Option>
-                  <Option value="following">跟进中</Option>
-                  <Option value="proposal">方案/报价</Option>
-                  <Option value="negotiation">谈判中</Option>
-                  <Option value="won">已成交</Option>
-                  <Option value="lost">已流失</Option>
+                  <Option value="phone_contact">电话联络</Option>
+                  <Option value="customer_visit">客户拜访</Option>
+                  <Option value="project_publish">项目发布</Option>
+                  <Option value="project_docking">项目对接</Option>
+                  <Option value="project_landing">项目落地</Option>
                 </Select>
               </Form.Item>
             </Col>

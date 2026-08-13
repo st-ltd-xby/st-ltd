@@ -37,6 +37,7 @@ const menuItems = [
       { key: '/admin/leads', icon: <UserOutlined />, label: '线索管理' },
       { key: '/admin/opportunities', icon: <FundOutlined />, label: '商机管理' },
       { key: '/admin/opportunity-board', icon: <DashboardOutlined />, label: '商机看板' },
+      { key: '/admin/marketing?tab=marketing', icon: <TeamOutlined />, label: '员工管理' },
     ],
   },
   {

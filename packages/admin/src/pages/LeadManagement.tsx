@@ -501,6 +501,31 @@ const LeadManagement: React.FC = () => {
           <Form.Item name="tags" label="标签">
             <Select mode="tags" placeholder="标签" />
           </Form.Item>
+          
+          {/* 人员分配 */}
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="assigneeId" label="分配负责人">
+                <Select placeholder="选择负责人" allowClear showSearch optionFilterProp="label">
+                  {/* TODO: 从员工管理模块获取员工列表 */}
+                  <Option value="emp001" label="张三">张三</Option>
+                  <Option value="emp002" label="李四">李四</Option>
+                  <Option value="emp003" label="王五">王五</Option>
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+          
+          {/* 任务下达 */}
+          <Form.Item name="assignedTask" label="下达任务">
+            <Select placeholder="选择任务类型" allowClear>
+              <Option value="phone_contact">电话联络</Option>
+              <Option value="customer_visit">客户拜访（需拍照打卡）</Option>
+              <Option value="follow_up">持续跟进</Option>
+              <Option value="qualification">资质审核</Option>
+            </Select>
+          </Form.Item>
+          
           <Form.Item name="note" label="备注">
             <Input.TextArea rows={3} />
           </Form.Item>
