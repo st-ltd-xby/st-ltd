@@ -90,6 +90,9 @@ export const scrmApi = {
   updateOpportunity: (id: string, data: any) => api.put(`/scrm/opportunities/${id}`, data),
   getTags: () => api.get('/scrm/tags'),
   createTag: (data: any) => api.post('/scrm/tags', data),
+  // 拜访记录
+  createVisit: (data: any) => api.post('/scrm/visits', data),
+  getVisits: (params?: any) => api.get('/scrm/visits', { params }),
 };
 
 // Content

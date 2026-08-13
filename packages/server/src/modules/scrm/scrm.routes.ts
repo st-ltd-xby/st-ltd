@@ -115,7 +115,7 @@ router.get('/customers', async (req: Request, res: Response) => {
     }
 
     const [customers, total] = await Promise.all([
-      prisma.customer.findMany({ where, skip, take: Number(pageSize), include: { _count: { select: { contacts: true, opportunities: true } } }, orderBy: { updatedAt: 'desc' } }),
+      prisma.customer.findMany({ where, skip, take: Number(pageSize), include: { _count: { select: { contacts: true, opportunities: true } }, visitRecords: { select: { id: true, visitTime: true, photos: true, content: true, location: true, address: true, latitude: true, longitude: true }, orderBy: { visitTime: 'desc' } } }, orderBy: { updatedAt: 'desc' }),
       prisma.customer.count({ where }),
     ]);
 
@@ -141,7 +141,7 @@ router.get('/customers/:id', async (req: Request, res: Response) => {
   try {
     const customer = await prisma.customer.findFirst({
       where: { id: req.params.id, tenantId: req.user!.tenantId },
-      include: { contacts: true, opportunities: { orderBy: { createdAt: 'desc' } } },
+      include: { contacts: true, opportunities: { orderBy: { createdAt: 'desc' } }, visitRecords: { select: { id: true, visitTime: true, photos: true, content: true, location: true, address: true, latitude: true, longitude: true }, orderBy: { visitTime: 'desc' } } },
     });
     if (!customer) return notFound(res, '客户不存在');
     success(res, customer);
@@ -218,6 +218,45 @@ router.put('/opportunities/:id', async (req: Request, res: Response) => {
 
     const opportunity = await prisma.opportunity.update({ where: { id: req.params.id }, data: data as any });
     success(res, opportunity, '商机更新成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+// ===== 拜访记录 =====
+
+router.post('/visits', async (req: Request, res: Response) => {
+  try {
+    const { customerId, customerName, location, address, latitude, longitude, photos, content } = req.body;
+    const visit = await prisma.visitRecord.create({
+      data: {
+        customerId,
+        customerName,
+        userId: req.user!.userId,
+        location,
+        address,
+        latitude: latitude ? Number(latitude) : undefined,
+        longitude: longitude ? Number(longitude) : undefined,
+        photos: JSON.stringify(photos || []),
+        content,
+      },
+    });
+    success(res, visit, '拜访记录保存成功');
+  } catch (error: any) {
+    fail(res, error.message);
+  }
+});
+
+router.get('/visits', async (req: Request, res: Response) => {
+  try {
+    const { customerId } = req.query;
+    const where: any = {};
+    if (customerId) where.customerId = customerId as string;
+    const visits = await prisma.visitRecord.findMany({
+      where,
+      orderBy: { visitTime: 'desc' },
+    });
+    success(res, visits);
   } catch (error: any) {
     fail(res, error.message);
   }

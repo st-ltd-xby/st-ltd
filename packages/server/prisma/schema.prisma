@@ -278,9 +278,28 @@ model Customer {
   lead          Lead?       @relation(fields: [leadId], references: [id])
   tenant        Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   opportunities Opportunity[]
+  visitRecords  VisitRecord[]
 
   @@index([tenantId, level])
   @@index([tenantId, stage])
+}
+
+model VisitRecord {
+  id          String   @id @default(cuid())
+  customerId  String
+  userId      String?
+  customerName String?
+  visitTime   DateTime @default(now())
+  location    String?
+  address     String?
+  latitude    Float?
+  longitude   Float?
+  photos      String   @default("[]") // JSON array of photo URLs
+  content     String?
+  createdAt   DateTime @default(now())
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
 }
 
 model Contact {
