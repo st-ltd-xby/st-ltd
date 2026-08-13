@@ -49,6 +49,7 @@ model User {
   employeeCard  EmployeeCard?
   followUps     FollowUp[]
   assignedLeads Lead[]         @relation("LeadAssignee")
+  assignedCustomers Customer[] @relation("CustomerAssignee") // 分配的客户
   operationLogs OperationLog[]
   shareRecords  ShareRecord[]
   tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)

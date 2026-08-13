@@ -192,7 +192,7 @@ router.get('/customers', async (req: Request, res: Response) => {
     ]);
 
     // 映射 assignee.name 为 assigneeName
-    const customersWithAssignee = customers.map(c => ({
+    const customersWithAssignee = (customers as any).map((c: any) => ({
       ...c,
       assigneeName: c.assignee?.name || null,
     }));
