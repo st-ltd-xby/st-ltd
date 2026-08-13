@@ -546,10 +546,9 @@ router.get('/customers', authorizeRole(['admin']), async (req: Request, res: Res
       prisma.customer.count({ where: whereConditions })
     ]);
 
-    // 映射 assignee.name 为 assigneeName
     const customersWithAssignee = (customers as any).map((c: any) => ({
       ...c,
-      assigneeName: c.assignee?.name || null,
+      assigneeName: c.assignee?.name || null, // 暂时返回null，后续通过员工列表查询
     }));
 
     success(res, { list: customersWithAssignee, total, page: Number(page), pageSize: Number(pageSize) }, '客户列表获取成功');

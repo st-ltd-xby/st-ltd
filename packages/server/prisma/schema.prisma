@@ -49,7 +49,6 @@ model User {
   employeeCard  EmployeeCard?
   followUps     FollowUp[]
   assignedLeads Lead[]         @relation("LeadAssignee")
-  assignedCustomers Customer[] @relation("CustomerAssignee") // 分配的客户
   operationLogs OperationLog[]
   shareRecords  ShareRecord[]
   tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -270,7 +269,7 @@ model Customer {
   address       String?
   website       String?
   leadId        String?     @unique
-  assigneeId    String?       // 对接人ID
+  assigneeId    String?       // 对接人ID（纯字符串，无外键）
   tags          String
   totalDeal     Float         @default(0)
   note          String?
@@ -282,7 +281,6 @@ model Customer {
   opportunities Opportunity[]
   visitRecords  VisitRecord[]
   followUps     FollowUp[]    // 客户跟进记录
-  assignee      User?       @relation("CustomerAssignee", fields: [assigneeId], references: [id])
 
   @@index([tenantId, level])
   @@index([tenantId, stage])
