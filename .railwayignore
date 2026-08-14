@@ -9,7 +9,6 @@ fc-flat
 *.zip
 *.ps1
 *.py
-*.sh
 *.mjs
 test-*
 verify-*
