@@ -2,4 +2,4 @@
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "/app/packages/server/start.sh"
+startCommand = "node /app/packages/server/start.js"
