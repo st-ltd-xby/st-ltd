@@ -537,19 +537,13 @@ router.get('/customers', authorizeRole(['admin']), async (req: Request, res: Res
         include: {
           contacts: true,
           opportunities: true,
-          lead: { select: { id: true, source: true, createdAt: true } },
-          visitRecords: { select: { id: true, visitTime: true, photos: true, content: true } },
+          lead: { select: { id: true, source: true, createdAt: true } }
         }
       }),
       prisma.customer.count({ where: whereConditions })
     ]);
 
-    const customersWithAssignee = (customers as any).map((c: any) => ({
-      ...c,
-      assigneeName: c.assignee?.name || null, // 暂时返回null，后续通过员工列表查询
-    }));
-
-    success(res, { list: customersWithAssignee, total, page: Number(page), pageSize: Number(pageSize) }, '客户列表获取成功');
+    success(res, { list: customers, total, page: Number(page), pageSize: Number(pageSize) }, '客户列表获取成功');
   } catch (error: any) {
     fail(res, error.message);
   }
@@ -580,8 +574,7 @@ router.get('/customers/:id', authorizeRole(['admin']), async (req: Request, res:
       include: {
         contacts: true,
         opportunities: true,
-        lead: { include: { followUps: { orderBy: { createdAt: 'desc' } } } },
-        visitRecords: { select: { id: true, visitTime: true, photos: true, content: true, location: true, address: true }, orderBy: { visitTime: 'desc' } },
+        lead: { include: { followUps: { orderBy: { createdAt: 'desc' } } } }
       }
     });
 
@@ -631,19 +624,7 @@ router.put('/customers/:id', authorizeRole(['admin']), async (req: Request, res:
     
     const customer = await prisma.customer.update({
       where: { id, tenantId: req.user!.tenantId },
-      data: { 
-        name, 
-        industry, 
-        level, 
-        stage, 
-        contactName, 
-        contactPhone, 
-        contactEmail, 
-        address, 
-        website, 
-        tags, 
-        note
-      }
+      data: { name, industry, level, stage, contactName, contactPhone, contactEmail, address, website, tags, note }
     });
 
     success(res, customer, '客户更新成功');
