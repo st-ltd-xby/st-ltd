@@ -269,6 +269,7 @@ model Customer {
   address       String?
   website       String?
   leadId        String?     @unique
+  assigneeId    String?       // 对接人ID（纯字符串，无外键）
   tags          String
   totalDeal     Float         @default(0)
   note          String?

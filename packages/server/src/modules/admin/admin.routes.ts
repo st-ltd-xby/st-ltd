@@ -622,9 +622,11 @@ router.put('/customers/:id', authorizeRole(['admin']), async (req: Request, res:
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const { name, industry, level, stage, contactName, contactPhone, contactEmail, address, website, tags, note } = req.body;
     
+    const { name, industry, level, stage, contactName, contactPhone, contactEmail, address, website, tags, note, assigneeId } = req.body;
+    
     const customer = await prisma.customer.update({
       where: { id, tenantId: req.user!.tenantId },
-      data: { name, industry, level, stage, contactName, contactPhone, contactEmail, address, website, tags, note }
+      data: { name, industry, level, stage, contactName, contactPhone, contactEmail, address, website, tags, note, assigneeId: assigneeId || null }
     });
 
     success(res, customer, '客户更新成功');
