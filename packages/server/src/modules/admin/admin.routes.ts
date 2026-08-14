@@ -620,8 +620,6 @@ router.post('/customers', authorizeRole(['admin']), async (req: Request, res: Re
 router.put('/customers/:id', authorizeRole(['admin']), async (req: Request, res: Response) => {
   try {
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const { name, industry, level, stage, contactName, contactPhone, contactEmail, address, website, tags, note } = req.body;
-    
     const { name, industry, level, stage, contactName, contactPhone, contactEmail, address, website, tags, note, assigneeId } = req.body;
     
     const customer = await prisma.customer.update({
