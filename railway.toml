@@ -2,4 +2,4 @@
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "cd packages/server && npx prisma@5.22.0 db push && npx tsx src/app.ts"
+startCommand = "npx prisma@5.22.0 db push --force-reset --schema=/app/packages/server/prisma/schema.prisma && /app/packages/server/node_modules/.bin/tsx /app/packages/server/src/app.ts"
