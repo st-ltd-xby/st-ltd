@@ -12,37 +12,23 @@ const mobileMarker = `<script>window.__MOBILE_PAGE__ = true;</script>`;
 html = html.replace('</head>', `${mobileMarker}</head>`);
 
 // 读取所有 JS 文件并内联
-const jsFiles = [
-  'assets/index-Du_yYkyD.js',
-  'assets/react-dom-WKMewNdz.js',
-  'assets/client-Bi0hG3BE.js',
-  'assets/jsx-runtime-BSzLRKme.js',
-  'assets/UserOutlined-DRFStsjd.js',
-  'assets/button-D6Oa9lj-.js',
-  'assets/axios-WTvwPmkR.js',
-  'assets/row-BOes9b42.js',
-  'assets/api-DjJorteA.js',
-  'assets/dropdown-DKMfrtFX.js',
-  'assets/table-DDtBoOWE.js',
-  'assets/popover-Ch3yi1rp.js',
-  'assets/popconfirm-C1XveKBq.js'
-];
+const assetsPath = path.join(distPath, 'assets');
+const allJsFiles = fs.readdirSync(assetsPath).filter(f => f.endsWith('.js'));
 
 let inlineScripts = '';
+let totalSize = 0;
 
-for (const jsFile of jsFiles) {
-  const jsPath = path.join(distPath, jsFile);
-  if (fs.existsSync(jsPath)) {
-    const jsContent = fs.readFileSync(jsPath, 'utf-8');
-    inlineScripts += `<script type="module">${jsContent}</script>\n`;
-    console.log(`✓ Inlined: ${jsFile} (${(jsContent.length / 1024).toFixed(0)} KB)`);
-  } else {
-    console.warn(` Missing: ${jsFile}`);
-  }
+for (const jsFile of allJsFiles) {
+  const jsPath = path.join(assetsPath, jsFile);
+  const jsContent = fs.readFileSync(jsPath, 'utf-8');
+  inlineScripts += `<script type="module">${jsContent}</script>\n`;
+  totalSize += jsContent.length;
+  console.log(`✓ Inlined: ${jsFile} (${(jsContent.length / 1024).toFixed(0)} KB)`);
 }
 
-// 替换 HTML 中的 script 标签为内联脚本
-html = html.replace(/<script type="module" crossorigin src="\/assets\/[^"]+"><\/script>/g, '');
+// 替换 HTML 中的 script 和 link 标签为内联脚本
+html = html.replace(/<script type="module" crossorigin src="\/assets\/[^ "]+"><\/script>/g, '');
+html = html.replace(/<link rel="modulepreload" crossorigin href="\/assets\/ [^"]+">/g, '');
 html = html.replace('</body>', `${inlineScripts}</body>`);
 
 // 写入输出文件
