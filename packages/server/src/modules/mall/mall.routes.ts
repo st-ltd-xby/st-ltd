@@ -2466,12 +2466,12 @@ router.get('/dashboard/stats', async (req: Request, res: Response) => {
     });
     
     // 按日期聚合订单金额
-    const orderTrend: { [key: string]: number } = recentOrders.reduce<{ [key: string]: number }>((acc, order) => {
+    const orderTrend = recentOrders.reduce((acc, order) => {
       const date = new Date(order.createdAt).toISOString().split('T')[0];
       if (!acc[date]) acc[date] = 0;
       acc[date] += order.payAmount;
       return acc;
-    }, {});
+    }, {} as { [key: string]: number });
     
     const orderTrendData = Object.entries(orderTrend)
       .map(([date, amount]) => ({ date, amount }))
@@ -2774,11 +2774,11 @@ router.post('/forms/:id/submit', async (req: Request, res: Response) => {
           email: leadEmail || null,
           company: leadCompany || null,
           source: 'form',
-          sourceId: formId,
+          sourceId: id,
           status: 'new',
           priority: 'medium',
           tags: '',
-          note: leadMessage || `通过表单 ${formId} 提交`,
+          note: leadMessage || `通过表单 ${id} 提交`,
         },
       });
     }
