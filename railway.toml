@@ -2,4 +2,4 @@
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "/bin/sh -c 'cd /app/packages/server && npx prisma@5.22.0 db push --force-reset && npx tsx src/app.ts'"
+startCommand = "/bin/sh -c 'cd /app/packages/server && npx prisma@5.22.0 db push --force-reset && node dist/app.js'"
