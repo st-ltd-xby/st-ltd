@@ -1,0 +1,34 @@
+edition: 3.0.0
+name: st-ltd-mobile-pages
+access: default
+
+vars:
+  region: cn-hangzhou
+
+services:
+  mobile-pages:
+    component: fc3
+    props:
+      region: ${vars.region}
+      functionName: st-ltd-mobile-pages
+      description: ST-LTD移动端页面（名片扫描、移动拜访）
+      runtime: nodejs18
+      codeUri: ./
+      handler: fc-mobile-pages.handler
+      memorySize: 512
+      timeout: 30
+      internetAccess: true
+      triggers:
+        - triggerName: httpTrigger
+          triggerType: http
+          triggerConfig:
+            authType: anonymous
+            methods:
+              - GET
+              - POST
+      customDomains:
+        - domainName: auto
+          protocol: HTTP
+          routeConfigs:
+            - path: /*
+              qualifier: LATEST

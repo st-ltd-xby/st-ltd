@@ -62,8 +62,25 @@ export default function MobileVisits() {
     } catch { /* ignore */ }
   };
 
-  // 快速定位（直接显示经纬度）
-  const getCurrentLocation = () => {
+  // 百度地图逆地理编码（获取中文地址）
+const reverseGeocode = async (lat: number, lng: number): Promise<string> => {
+  try {
+    // WGS84 → BD09 转换
+    const bd = wgs84ToBd09(lat, lng);
+    const url = `https://api.map.baidu.com/reverse_geocoding/v3/?ak=${BAIDU_MAP_AK}&output=json&coordtype=bd09ll&location=${bd.lat},${bd.lng}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.status === 0 && data.result?.formatted_address) {
+      return data.result.formatted_address;
+    }
+    return '';
+  } catch {
+    return '';
+  }
+};
+
+// 快速定位 + 百度地图逆地理编码
+  const getCurrentLocation = async () => {
     if (!navigator.geolocation) {
       message.error('当前浏览器不支持定位');
       return;
@@ -74,15 +91,24 @@ export default function MobileVisits() {
     setLocation('');
 
     navigator.geolocation.getCurrentPosition(
-      (position) => {
+      async (position) => {
         const lat = position.coords.latitude;
         const lng = position.coords.longitude;
         setCoords({ lat, lng });
-        const locStr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-        setLocation(locStr);
-        setAddress(locStr);
+        
+        // 调用百度地图逆地理编码获取中文地址
+        const addr = await reverseGeocode(lat, lng);
+        if (addr) {
+          setAddress(addr);
+          setLocation(addr);
+          message.success(`定位成功：${addr}`);
+        } else {
+          const locStr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+          setAddress(locStr);
+          setLocation(locStr);
+          message.success('定位成功（地址解析失败，显示坐标）');
+        }
         setLocationLoading(false);
-        message.success('定位成功');
       },
       (err) => {
         setLocationLoading(false);
@@ -225,30 +251,31 @@ export default function MobileVisits() {
         totalSize: `${(visitRecord.photos.reduce((sum, p) => sum + p.length, 0) / 1024 / 1024).toFixed(2)}MB`,
       });
 
-      // 保存到 localStorage
-      const existingVisits = JSON.parse(localStorage.getItem('visitRecords') || '[]');
-      existingVisits.push(visitRecord);
-      localStorage.setItem('visitRecords', JSON.stringify(existingVisits));
-      console.log('💾 已保存到 localStorage.visitRecords');
-      
-      // 同时保存到客户维度的记录中（方便查询）
-      const customerVisitsKey = `visits_customer_${visitRecord.customerId}`;
-      const customerVisits = JSON.parse(localStorage.getItem(customerVisitsKey) || '[]');
-      customerVisits.push(visitRecord);
-      localStorage.setItem(customerVisitsKey, JSON.stringify(customerVisits));
-      console.log(`💾 已保存到 localStorage.${customerVisitsKey}`);
-      
-      // 验证存储
-      const savedVisits = JSON.parse(localStorage.getItem(customerVisitsKey) || '[]');
-      console.log('🔍 验证存储 - 读取到的记录数:', savedVisits.length);
-      if (savedVisits.length > 0) {
-        const lastVisit = savedVisits[savedVisits.length - 1];
-        console.log(' 最后一条记录的photos:', lastVisit.photos?.map((p: string, i: number) => ({ index: i, length: p.length, hasData: p.length > 100 })));
-      }
+      // 调用后端 API 保存拜访记录
+      const res: any = await scrmApi.createVisit({
+        customerId: visitRecord.customerId,
+        customerName: visitRecord.customerName,
+        location: visitRecord.location,
+        address: visitRecord.address,
+        latitude: visitRecord.latitude,
+        longitude: visitRecord.longitude,
+        photos: visitRecord.photos,
+        content: visitRecord.content,
+      });
 
-      console.log('✅ 拜访记录已保存到本地存储');
-      message.success('拜访记录已保存');
-      setStep('success');
+      if (res?.code === 0) {
+        console.log('✅ 拜访记录已保存到后端');
+        message.success('拜访记录已保存');
+        setStep('success');
+      } else {
+        console.error('❌ 后端保存失败:', res);
+        // 降级：保存到 localStorage
+        const existingVisits = JSON.parse(localStorage.getItem('visitRecords') || '[]');
+        existingVisits.push(visitRecord);
+        localStorage.setItem('visitRecords', JSON.stringify(existingVisits));
+        message.warning('云端保存失败，已保存到本地');
+        setStep('success');
+      }
     } catch (error: any) {
       console.error('❌ 提交失败:', error);
       message.error(error.message || '提交失败');

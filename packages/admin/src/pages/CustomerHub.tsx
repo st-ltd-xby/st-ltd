@@ -403,6 +403,32 @@ const CustomerHub: React.FC = () => {
       render: (v: string) => v ? <Tag color="blue"><UserOutlined /> {v}</Tag> : <Tag>-</Tag>,
     },
     {
+      title: '电话联络',
+      key: 'phoneContactTask',
+      width: 100,
+      render: (_: any, record: any) => {
+        const completed = (record.followUps || []).some((f: any) => f.type === 'phone');
+        return completed ? (
+          <Tag color="success" icon={<CheckCircleOutlined />}>✅已完成</Tag>
+        ) : (
+          <Tag color="default">⏳待执行</Tag>
+        );
+      },
+    },
+    {
+      title: '客户拜访',
+      key: 'customerVisitTask',
+      width: 100,
+      render: (_: any, record: any) => {
+        const completed = (record.visitRecords || []).length > 0;
+        return completed ? (
+          <Tag color="success" icon={<CheckCircleOutlined />}>✅已完成</Tag>
+        ) : (
+          <Tag color="default">⏳待执行</Tag>
+        );
+      },
+    },
+    {
       title: '标签',
       dataIndex: 'tags',
       key: 'tags',

@@ -547,10 +547,10 @@ router.post('/customers', (0, auth_1.authorizeRole)(['admin']), async (req, res)
 router.put('/customers/:id', (0, auth_1.authorizeRole)(['admin']), async (req, res) => {
     try {
         const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-        const { name, industry, level, stage, contactName, contactPhone, contactEmail, address, website, tags, note } = req.body;
+        const { name, industry, level, stage, contactName, contactPhone, contactEmail, address, website, tags, note, assigneeId } = req.body;
         const customer = await prisma_1.default.customer.update({
             where: { id, tenantId: req.user.tenantId },
-            data: { name, industry, level, stage, contactName, contactPhone, contactEmail, address, website, tags, note }
+            data: { name, industry, level, stage, contactName, contactPhone, contactEmail, address, website, tags, note, assigneeId: assigneeId || null }
         });
         (0, response_1.success)(res, customer, '客户更新成功');
     }

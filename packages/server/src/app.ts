@@ -9,6 +9,7 @@ import { errorHandler, notFoundHandler } from './middleware/error';
 import swaggerDocument from './common/swagger';
 import { welcomeHtml } from './common/welcome';
 import { autoSeed } from './common/seed';
+import fs from 'fs';
 
 import authRoutes from './modules/auth/auth.routes';
 import cmsRoutes from './modules/cms/cms.routes';
@@ -36,6 +37,63 @@ app.use(express.urlencoded({ extended: true }));
 // 健康检查（必须在最前面）
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '1.0.0', aiTools: 'registered' });
+});
+
+// 移动端页面路由（通过后端域名访问，避免运营商拦截）
+// 从 server/public 文件夹读取（Railway 会自动包含此文件夹）
+const publicHtmlPath = path.join(__dirname, 'public', 'index.html');
+let originalHtmlContent = '';
+
+if (fs.existsSync(publicHtmlPath)) {
+  originalHtmlContent = fs.readFileSync(publicHtmlPath, 'utf-8');
+  console.log('✓ Mobile pages loaded from:', publicHtmlPath);
+} else {
+  console.warn('⚠ Warning: Mobile pages HTML not found at', publicHtmlPath);
+}
+
+// 名片扫描页面
+app.get('/scan', (req, res) => {
+  if (!originalHtmlContent) {
+    return res.status(500).send('Mobile pages not available');
+  }
+  // 替换标题
+  let html = originalHtmlContent.replace('<title>ST-LTD 运营系统 - FIX20260811-SEO</title>', '<title>名片扫描 - ST-LTD</title>');
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(html);
+});
+
+// 移动拜访页面
+app.get('/mobile-visits', (req, res) => {
+  if (!originalHtmlContent) {
+    return res.status(500).send('Mobile pages not available');
+  }
+  // 替换标题
+  let html = originalHtmlContent.replace('<title>ST-LTD 运营系统 - FIX20260811-SEO</title>', '<title>移动拜访 - ST-LTD</title>');
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(html);
+});
+
+// 静态资源代理（从 dist/public 文件夹读取）
+app.use('/assets/*', async (req, res) => {
+  try {
+    const assetPath = req.path.replace(/^\/assets\//, '');
+    const localPath = path.join(__dirname, 'public/assets', assetPath);
+    
+    if (!fs.existsSync(localPath)) {
+      console.warn(`Asset not found: ${localPath}`);
+      return res.status(404).send('Not Found');
+    }
+    
+    const content = fs.readFileSync(localPath);
+    const contentType = assetPath.endsWith('.js') ? 'application/javascript' : 
+                        assetPath.endsWith('.css') ? 'text/css' : 'application/octet-stream';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.send(content);
+  } catch (error) {
+    console.error('Failed to read asset:', req.path, error);
+    res.status(500).send('Internal Server Error');
+  }
 });
 
 app.get('/', (req, res) => {
@@ -110,7 +168,9 @@ async function start() {
 }
 
 // 仅在本地开发环境自动启动（Vercel / 阿里云 FC 等 Serverless 环境不启动）
-if (!process.env.VERCEL && !process.env.FC_FUNCTION_NAME) {
+// FC 环境中 NODE_ENV=production 且没有 PORT 环境变量（FC 使用内部端口）
+const isServerless = process.env.VERCEL || (process.env.NODE_ENV === 'production' && !process.env.PORT);
+if (!isServerless) {
   start();
 }
 
