@@ -62,33 +62,42 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '1.0.0', aiTools: 'registered' });
 });
 // 移动端页面路由（通过后端域名访问，避免运营商拦截）
-// 从 server/public 文件夹读取（Railway 会自动包含此文件夹）
-const publicHtmlPath = path_1.default.join(__dirname, 'public', 'index.html');
-let originalHtmlContent = '';
-if (fs_1.default.existsSync(publicHtmlPath)) {
-    originalHtmlContent = fs_1.default.readFileSync(publicHtmlPath, 'utf-8');
-    console.log('✓ Mobile pages loaded from:', publicHtmlPath);
+// 使用内联 HTML 方案（所有 JS/CSS 打包到单个 HTML 文件中）
+// 优先从 dist 目录读取（Railway 部署后会包含此目录）
+const inlineHtmlPath = path_1.default.join(__dirname, 'mobile-pages-inline.html');
+let inlineHtmlContent = '';
+if (fs_1.default.existsSync(inlineHtmlPath)) {
+    inlineHtmlContent = fs_1.default.readFileSync(inlineHtmlPath, 'utf-8');
+    console.log('✓ Mobile pages inline HTML loaded successfully from dist (size:', inlineHtmlContent.length, 'bytes)');
 }
 else {
-    console.warn('⚠ Warning: Mobile pages HTML not found at', publicHtmlPath);
+    // 备用路径：从源码目录读取（本地开发时使用）
+    const srcInlineHtmlPath = path_1.default.join(__dirname, '..', '..', 'server', 'mobile-pages-inline.html');
+    if (fs_1.default.existsSync(srcInlineHtmlPath)) {
+        inlineHtmlContent = fs_1.default.readFileSync(srcInlineHtmlPath, 'utf-8');
+        console.log('✓ Mobile pages inline HTML loaded from src (size:', inlineHtmlContent.length, 'bytes)');
+    }
+    else {
+        console.warn(' Warning: Mobile pages inline HTML not found at', inlineHtmlPath, 'or', srcInlineHtmlPath);
+    }
 }
 // 名片扫描页面
 app.get('/scan', (req, res) => {
-    if (!originalHtmlContent) {
+    if (!inlineHtmlContent) {
         return res.status(500).send('Mobile pages not available');
     }
     // 替换标题
-    let html = originalHtmlContent.replace('<title>ST-LTD 运营系统 - FIX20260811-SEO</title>', '<title>名片扫描 - ST-LTD</title>');
+    let html = inlineHtmlContent.replace('<title>ST-LTD 运营系统 - FIX20260811-SEO</title>', '<title>名片扫描 - ST-LTD</title>');
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(html);
 });
 // 移动拜访页面
 app.get('/mobile-visits', (req, res) => {
-    if (!originalHtmlContent) {
+    if (!inlineHtmlContent) {
         return res.status(500).send('Mobile pages not available');
     }
     // 替换标题
-    let html = originalHtmlContent.replace('<title>ST-LTD 运营系统 - FIX20260811-SEO</title>', '<title>移动拜访 - ST-LTD</title>');
+    let html = inlineHtmlContent.replace('<title>ST-LTD 运营系统 - FIX20260811-SEO</title>', '<title>移动拜访 - ST-LTD</title>');
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(html);
 });
