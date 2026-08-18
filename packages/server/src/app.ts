@@ -69,27 +69,11 @@ app.get('/mobile-visits', (req, res) => {
   res.send(html);
 });
 
-// 静态资源代理（从 dist/public 文件夹读取）
-app.use('/assets/*', async (req, res) => {
-  try {
-    const assetPath = req.path.replace(/^\/assets\//, '');
-    const localPath = path.join(__dirname, '..', 'public/assets', assetPath);
-    
-    if (!assetPath || !fs.existsSync(localPath) || fs.statSync(localPath).isDirectory()) {
-      return res.status(404).send('Not Found');
-    }
-    
-    const content = fs.readFileSync(localPath);
-    const contentType = assetPath.endsWith('.js') ? 'application/javascript' : 
-                        assetPath.endsWith('.css') ? 'text/css' : 'application/octet-stream';
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-    res.send(content);
-  } catch (error) {
-    console.error('Failed to read asset:', req.path, error);
-    res.status(500).send('Internal Server Error');
-  }
-});
+// 静态资源服务（从 public/assets 文件夹读取）
+app.use('/assets', express.static(path.join(__dirname, '..', 'public', 'assets'), {
+  maxAge: '1y',
+  immutable: true,
+}));
 
 app.get('/', (req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
