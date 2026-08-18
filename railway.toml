@@ -1,5 +1,6 @@
 [build]
 builder = "NIXPACKS"
+buildCommand = "cd packages/server && npx prisma generate && npx tsc"
 
 [deploy]
 startCommand = "/bin/sh -c 'cd /app/packages/server && npx prisma@5.22.0 db push --force-reset && node dist/app.js'"
