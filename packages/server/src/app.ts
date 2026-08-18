@@ -75,8 +75,7 @@ app.use('/assets/*', async (req, res) => {
     const assetPath = req.path.replace(/^\/assets\//, '');
     const localPath = path.join(__dirname, '..', 'public/assets', assetPath);
     
-    if (!fs.existsSync(localPath)) {
-      console.warn(`Asset not found: ${localPath}`);
+    if (!assetPath || !fs.existsSync(localPath) || fs.statSync(localPath).isDirectory()) {
       return res.status(404).send('Not Found');
     }
     
