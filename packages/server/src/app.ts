@@ -40,7 +40,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // 移动端页面路由 - 直接服务原始 HTML，assets 由下方 /assets/* 路由提供
-const publicIndexPath = path.join(__dirname, 'public', 'index.html');
+const publicIndexPath = path.join(__dirname, '..', 'public', 'index.html');
 let publicIndexHtml = '';
 if (fs.existsSync(publicIndexPath)) {
   publicIndexHtml = fs.readFileSync(publicIndexPath, 'utf-8');
@@ -73,7 +73,7 @@ app.get('/mobile-visits', (req, res) => {
 app.use('/assets/*', async (req, res) => {
   try {
     const assetPath = req.path.replace(/^\/assets\//, '');
-    const localPath = path.join(__dirname, 'public/assets', assetPath);
+    const localPath = path.join(__dirname, '..', 'public/assets', assetPath);
     
     if (!fs.existsSync(localPath)) {
       console.warn(`Asset not found: ${localPath}`);
