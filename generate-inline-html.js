@@ -20,8 +20,13 @@ let totalSize = 0;
 
 for (const jsFile of allJsFiles) {
   const jsPath = path.join(assetsPath, jsFile);
-  const jsContent = fs.readFileSync(jsPath, 'utf-8');
-  inlineScripts += `<script type="module">${jsContent}</script>\n`;
+  let jsContent = fs.readFileSync(jsPath, 'utf-8');
+  
+  // 移除 import/export 语句（避免 ES module 语法错误）
+  jsContent = jsContent.replace(/^\s*import\s+.*$/gm, '');
+  jsContent = jsContent.replace(/^\s*export\s+(default\s+)?/gm, '');
+  
+  inlineScripts += jsContent + '\n';
   totalSize += jsContent.length;
   console.log(`✓ Inlined: ${jsFile} (${(jsContent.length / 1024).toFixed(0)} KB)`);
 }
@@ -29,7 +34,7 @@ for (const jsFile of allJsFiles) {
 // 替换 HTML 中的 script 和 link 标签为内联脚本
 html = html.replace(/<script type="module" crossorigin src="\/assets\/[^ "]+"><\/script>/g, '');
 html = html.replace(/<link rel="modulepreload" crossorigin href="\/assets\/ [^"]+">/g, '');
-html = html.replace('</body>', `${inlineScripts}</body>`);
+html = html.replace('</body>', `<script>${inlineScripts}</script></body>`);
 
 // 写入输出文件
 fs.writeFileSync(outputPath, html, 'utf-8');
