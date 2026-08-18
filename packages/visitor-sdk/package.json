@@ -6,7 +6,7 @@
   "module": "dist/index.esm.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "rollup -c",
+    "build": "echo 'visitor-sdk build skipped'",
     "dev": "rollup -c -w"
   },
   "devDependencies": {
