@@ -69,6 +69,16 @@ app.get('/mobile-visits', (req, res) => {
   res.send(html);
 });
 
+// 登录页面（SPA 路由）
+app.get('/login', (req, res) => {
+  if (!publicIndexHtml) {
+    return res.status(500).send('Login page not available');
+  }
+  let html = publicIndexHtml.replace(/<title>[^<]*<\/title>/, '<title>登录 - ST-LTD</title>');
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(html);
+});
+
 // 静态资源服务（从 public/assets 文件夹读取）
 app.use('/assets', express.static(path.join(__dirname, '..', 'public', 'assets'), {
   maxAge: '1y',
